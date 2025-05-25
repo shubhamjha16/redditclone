@@ -1,0 +1,40 @@
+<div class="card mb-3 reel-item">
+    {% if reel.video_url %}
+        {# Attempt to use HTML5 video player for direct links #}
+        {# This will only work for direct video file URLs (e.g., .mp4, .webm) #}
+        {# For platform URLs (YouTube etc.), this will not embed the video directly #}
+        <div class="embed-responsive embed-responsive-16by9">
+            <video controls class="embed-responsive-item" src="{{ reel.video_url }}" allowfullscreen>
+                Your browser does not support the video tag. 
+                <a href="{{ reel.video_url }}">Watch Video</a>
+            </video>
+        </div>
+        {# Fallback link, especially if the video tag fails or for platform URLs #}
+        <div class="card-body text-center mt-2">
+             <a href="{{ reel.video_url }}" target="_blank" class="btn btn-sm btn-outline-primary">Open Video Source</a>
+        </div>
+    {% else %}
+        <div class="card-body text-center">
+            <p class="text-muted">No video URL provided.</p>
+        </div>
+    {% endif %}
+
+    <div class="card-body">
+        <p class="card-text">{{ reel.caption|truncate(150) }}</p>
+        <p>
+            <small class="text-muted">
+                Posted by: <a href="{{ url_for('user_profile', username=reel.author.username) }}">{{ reel.author.username }}</a>
+                {% if reel.college %}
+                    to <a href="{{ url_for('college_posts', college_id=reel.college.id) }}">{{ reel.college.name }}</a>
+                {% endif %}
+                on {{ reel.timestamp.strftime('%Y-%m-%d %H:%M') }}
+            </small>
+        </p>
+        <p>
+            <small class="text-muted">
+                Views: {{ reel.views_count }} | Likes: {{ reel.likes.count() }} | Comments: {{ reel.comments.count() }}
+            </small>
+        </p>
+        <a href="{{ url_for('view_reel', reel_id=reel.id) }}" class="btn btn-primary">View Reel & Comments</a>
+    </div>
+</div>

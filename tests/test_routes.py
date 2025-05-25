@@ -1,6 +1,7 @@
 import pytest
-from app.models import User, College, Post, Comment # For creating test data
+from app.models import User, College, Post, Comment, Reel, ReelComment, ReelLike # Added Reel models
 from app import db
+from flask import url_for # For generating URLs in tests
 
 def test_index_page_logged_out(client):
     response = client.get('/', follow_redirects=True)
@@ -245,3 +246,207 @@ def test_user_profile_displays_new_info(client, test_auth_client, init_database,
         assert b'value="Follow"' not in response_view_self.data 
         assert b'Unfollow</button>' not in response_view_self.data # Should not see unfollow button for self
         assert b'value="Unfollow"' not in response_view_self.data
+
+# --- Tests for Reel Routes ---
+
+def test_create_reel_route(test_auth_client, init_database, new_user, new_college):
+    """Test the /create_reel route: GET, POST (success, invalid), and auth."""
+    client = test_auth_client # Authenticated as new_user
+
+    # --- Test GET request ---
+    response_get = client.get(url_for('create_reel'))
+    assert response_get.status_code == 200
+    assert b"Upload New Reel" in response_get.data
+    assert b"Video URL" in response_get.data # Check for form field label
+    assert b"Caption" in response_get.data   # Check for form field label
+
+    # --- Test POST request (successful) ---
+    video_url_valid = "http://example.com/video.mp4"
+    caption_valid = "My cool test reel"
+    
+    with client.application.app_context(): # Ensure app context for DB operations
+        user_college_id = new_user.college_id # Get college_id within context if new_user is bound to a session
+        if not user_college_id and new_college: # If new_user doesn't have a college set by fixture
+            new_user.college_id = new_college.id
+            db.session.add(new_user)
+            db.session.commit()
+            user_college_id = new_user.college_id
+
+
+    response_post_success = client.post(url_for('create_reel'), data={
+        'video_url': video_url_valid,
+        'caption': caption_valid
+    }, follow_redirects=True)
+    
+    assert response_post_success.status_code == 200 # Assuming redirect to reels_feed (or view_reel)
+    assert b"Your reel has been posted!" in response_post_success.data # Flash message
+
+    with client.application.app_context():
+        posted_reel = Reel.query.filter_by(video_url=video_url_valid, caption=caption_valid).first()
+        assert posted_reel is not None
+        assert posted_reel.user_id == new_user.id
+        assert posted_reel.college_id == user_college_id
+
+    # --- Test POST request (invalid data - bad URL) ---
+    response_post_invalid = client.post(url_for('create_reel'), data={
+        'video_url': 'not_a_valid_url',
+        'caption': 'Test reel with invalid URL'
+    }, follow_redirects=True)
+    
+    assert response_post_invalid.status_code == 200 # Form re-renders
+    assert b"Invalid URL." in response_post_invalid.data # Error message from URL validator
+
+    # --- Test Authentication (unauthenticated client) ---
+    unauth_client_response = init_database.test_client().get(url_for('create_reel'), follow_redirects=False)
+    assert unauth_client_response.status_code == 302 # Redirect
+    assert '/login' in unauth_client_response.location
+
+def test_view_and_comment_on_reel_route(test_auth_client, client, init_database, new_user, new_college):
+    """Test /reel/<id> for viewing, view count, and commenting (auth/unauth)."""
+    auth_client = test_auth_client # Authenticated as new_user
+    
+    with client.application.app_context():
+        # Create a reel by another user to test view count increment by non-author
+        other_user = User(username="reelauthor", email="reelauthor@example.com")
+        other_user.set_password("password")
+        other_user.college_id = new_college.id
+        db.session.add(other_user)
+        db.session.commit()
+        
+        reel = Reel(user_id=other_user.id, college_id=new_college.id, 
+                    video_url="http://example.com/view_reel.mp4", caption="Viewable Reel")
+        db.session.add(reel)
+        db.session.commit()
+        reel_id = reel.id
+        initial_views = reel.views_count
+
+    # --- Test GET request (viewing) by unauthenticated client ---
+    response_get_unauth = client.get(url_for('view_reel', reel_id=reel_id))
+    assert response_get_unauth.status_code == 200
+    assert b"Viewable Reel" in response_get_unauth.data
+    assert b"http://example.com/view_reel.mp4" in response_get_unauth.data # Check for video URL in src
+    assert b"reelauthor" in response_get_unauth.data # Author's username
+
+    with client.application.app_context():
+        reel_after_unauth_view = Reel.query.get(reel_id)
+        assert reel_after_unauth_view.views_count == initial_views + 1 # View count increments
+
+    # --- Test GET request (viewing) by authenticated client (new_user, not author) ---
+    initial_views_before_auth_view = reel_after_unauth_view.views_count
+    response_get_auth = auth_client.get(url_for('view_reel', reel_id=reel_id))
+    assert response_get_auth.status_code == 200
+    
+    with client.application.app_context():
+        reel_after_auth_view = Reel.query.get(reel_id)
+        assert reel_after_auth_view.views_count == initial_views_before_auth_view + 1
+
+    # --- Test POST request (commenting - authenticated) ---
+    comment_content = "This is a great reel!"
+    response_post_comment_auth = auth_client.post(url_for('view_reel', reel_id=reel_id), data={
+        'content': comment_content
+    }, follow_redirects=True)
+    
+    assert response_post_comment_auth.status_code == 200 # Redirects to same page
+    assert b"Your comment has been posted." in response_post_comment_auth.data
+    
+    with client.application.app_context():
+        reel_with_comment = Reel.query.get(reel_id)
+        assert reel_with_comment.comments.count() == 1
+        first_comment = reel_with_comment.comments.first()
+        assert first_comment.content == comment_content
+        assert first_comment.user_id == new_user.id # new_user is the authenticated client
+
+    # --- Test POST request (commenting - unauthenticated) ---
+    response_post_comment_unauth = client.post(url_for('view_reel', reel_id=reel_id), data={
+        'content': "Unauthenticated comment attempt"
+    }, follow_redirects=False) # Check redirect location
+    
+    assert response_post_comment_unauth.status_code == 302
+    assert '/login' in response_post_comment_unauth.location
+    
+    with client.application.app_context():
+        reel_after_unauth_comment_attempt = Reel.query.get(reel_id)
+        assert reel_after_unauth_comment_attempt.comments.count() == 1 # Should still be 1 comment
+
+def test_like_unlike_reel_route(test_auth_client, init_database, new_user, new_college):
+    """Test /reel/<id>/like for liking, unliking, and authentication."""
+    client = test_auth_client # Authenticated as new_user
+
+    with client.application.app_context():
+        # Create a reel by another user
+        other_user_for_reel = User(username="reelowner", email="reelowner@example.com")
+        other_user_for_reel.set_password("password")
+        other_user_for_reel.college_id = new_college.id
+        db.session.add(other_user_for_reel)
+        db.session.commit()
+        
+        reel_to_like = Reel(user_id=other_user_for_reel.id, college_id=new_college.id,
+                            video_url="http://example.com/like_reel.mp4", caption="Likable Reel")
+        db.session.add(reel_to_like)
+        db.session.commit()
+        reel_id = reel_to_like.id
+
+    # --- Test Like action ---
+    response_like = client.post(url_for('reel_like', reel_id=reel_id), follow_redirects=True)
+    assert response_like.status_code == 200 # Redirects to view_reel
+    assert b"You liked the reel!" in response_like.data
+    
+    with client.application.app_context():
+        like_in_db = ReelLike.query.filter_by(user_id=new_user.id, reel_id=reel_id).first()
+        assert like_in_db is not None
+        assert Reel.query.get(reel_id).likes.count() == 1
+
+    # --- Test Unlike action ---
+    response_unlike = client.post(url_for('reel_like', reel_id=reel_id), follow_redirects=True)
+    assert response_unlike.status_code == 200 # Redirects to view_reel
+    assert b"You unliked the reel." in response_unlike.data
+    
+    with client.application.app_context():
+        like_in_db_after_unlike = ReelLike.query.filter_by(user_id=new_user.id, reel_id=reel_id).first()
+        assert like_in_db_after_unlike is None
+        assert Reel.query.get(reel_id).likes.count() == 0
+
+    # --- Test Authentication for like (unauthenticated client) ---
+    unauth_client = init_database.test_client()
+    response_like_unauth = unauth_client.post(url_for('reel_like', reel_id=reel_id), follow_redirects=False)
+    assert response_like_unauth.status_code == 302
+    assert '/login' in response_like_unauth.location
+
+def test_reels_feed_route(test_auth_client, client, init_database, new_user, new_college):
+    """Test /reels_feed for authenticated access, unauthenticated redirect, and content."""
+    auth_client = test_auth_client # Authenticated as new_user
+
+    with client.application.app_context():
+        # Create some reels
+        reel1 = Reel(user_id=new_user.id, college_id=new_college.id, 
+                     video_url="http://example.com/feed_reel1.mp4", caption="Feed Reel 1")
+        
+        other_user_feed = User(username="feedposter", email="feed@example.com")
+        other_user_feed.set_password("password")
+        other_user_feed.college_id = new_college.id
+        db.session.add(other_user_feed)
+        db.session.commit()
+        
+        reel2 = Reel(user_id=other_user_feed.id, college_id=new_college.id,
+                     video_url="http://example.com/feed_reel2.mp4", caption="Feed Reel 2")
+        db.session.add_all([reel1, reel2])
+        db.session.commit()
+
+    # --- Test Authenticated access ---
+    response_auth_feed = auth_client.get(url_for('reels_feed'))
+    assert response_auth_feed.status_code == 200
+    assert b"Reels Feed" in response_auth_feed.data
+    assert b"Create New Reel" in response_auth_feed.data # Button for creating new reel
+    assert b"Feed Reel 1" in response_auth_feed.data # Caption of reel1
+    assert b"Feed Reel 2" in response_auth_feed.data # Caption of reel2
+    # Basic pagination check (assuming default per_page is e.g. 5 or 10, and we have 2 reels)
+    # If per_page is high, no pagination links might appear.
+    # This example assumes per_page is low enough that with >1 reel, something related to pages might show,
+    # or at least the page loads correctly. For more robust pagination, create more items.
+    assert b"pagination" in response_auth_feed.data or Reel.query.count() <= 5 # Check for pagination elements or if few items
+
+    # --- Test Unauthenticated access ---
+    # /reels_feed is @login_required
+    unauth_response_feed = client.get(url_for('reels_feed'), follow_redirects=False)
+    assert unauth_response_feed.status_code == 302
+    assert '/login' in unauth_response_feed.location

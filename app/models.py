@@ -236,3 +236,49 @@ class Notification(db.Model):
 
 # Need to import json for get_payload
 import json
+
+# --- Reel, ReelComment, and ReelLike Models ---
+
+class Reel(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    college_id = db.Column(db.Integer, db.ForeignKey('college.id'), nullable=True) # Allow reels not tied to a specific college
+    video_url = db.Column(db.String(512), nullable=False) # For video link or path
+    caption = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
+    views_count = db.Column(db.Integer, default=0)
+
+    author = db.relationship('User', backref=db.backref('reels', lazy='dynamic'))
+    college = db.relationship('College', backref=db.backref('reels', lazy='dynamic'))
+    comments = db.relationship('ReelComment', backref='reel', lazy='dynamic', cascade="all, delete-orphan")
+    likes = db.relationship('ReelLike', backref='reel', lazy='dynamic', cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f'<Reel {self.id} by User {self.user_id}>'
+
+class ReelComment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    content = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    reel_id = db.Column(db.Integer, db.ForeignKey('reel.id'), nullable=False)
+
+    author = db.relationship('User', backref=db.backref('reel_comments', lazy='dynamic'))
+    # reel backref is defined in Reel.comments
+
+    def __repr__(self):
+        return f'<ReelComment {self.id} on Reel {self.reel_id} by User {self.user_id}>'
+
+class ReelLike(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    reel_id = db.Column(db.Integer, db.ForeignKey('reel.id'), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    liker = db.relationship('User', backref=db.backref('reel_likes', lazy='dynamic'))
+    # reel backref is defined in Reel.likes
+
+    __table_args__ = (db.UniqueConstraint('user_id', 'reel_id', name='_user_reel_uc'),)
+
+    def __repr__(self):
+        return f'<ReelLike {self.id} on Reel {self.reel_id} by User {self.user_id}>'

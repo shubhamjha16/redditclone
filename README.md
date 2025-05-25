@@ -9,6 +9,10 @@
     *   Post creation, viewing, voting, and commenting.
     *   College-specific spaces (sub-communities).
     *   Content display in a card-based, Reddit-like UI.
+*   **Enhanced User Profiles & Follow System:**
+    *   Customizable profile pictures and bios.
+    *   User activity tracking (`last_seen`).
+    *   Follower/Following system enabling users to connect.
 *   College-Specific Features:
     *   Course discussions.
     *   Study group organization.
@@ -19,6 +23,11 @@
     *   Content moderation (reporting system, review reported content).
 *   Search functionality (posts, courses, colleges).
 *   User notification system (e.g., for new comments on posts).
+*   **Reels Section (Instagram-like):**
+    *   Users can post short video content (via URL) with captions.
+    *   Viewable feed of reels with pagination.
+    *   Ability to like and comment on reels.
+    *   View count for reels.
 *   Mobile-responsive design.
 *   Comprehensive test suite (Pytest).
 

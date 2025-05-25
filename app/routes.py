@@ -4,10 +4,11 @@ from app.forms import (
     LoginForm, RegistrationForm, PostForm, CommentForm,
     CourseForm, StudyGroupForm, EventForm, get_college_courses,
     CollegeForm, ReportForm, ReportStatusUpdateForm, AdminEditUserForm,
-    SearchForm, EditProfileForm
+    SearchForm, EditProfileForm, ReelForm, ReelCommentForm # Added Reel forms
 )
 from app.models import (User, College, Post, Comment, Vote, VoteType, 
-                        Course, StudyGroup, Event, Report, ReportStatus, Notification) # Added Notification
+                        Course, StudyGroup, Event, Report, ReportStatus, Notification, # Added Notification
+                        Reel, ReelComment, ReelLike) # Added Reel models
 from app.utils import get_target_score, send_notification # Added send_notification
 from flask_login import login_user, logout_user, current_user, login_required
 from sqlalchemy import or_
@@ -786,3 +787,91 @@ def before_request_handler():
     if current_user.is_authenticated:
         current_user.last_seen = datetime.utcnow()
         db.session.commit()
+
+# -------------------------- Reel Routes ------------------------------------
+
+@app.route('/reels_feed', methods=['GET'])
+@login_required # Optional: make public if desired by removing decorator
+def reels_feed():
+    page = request.args.get('page', 1, type=int)
+    # Fetch reels, ordered by timestamp descending.
+    # Could also filter by college or other criteria.
+    reels_pagination = Reel.query.order_by(Reel.timestamp.desc()).paginate(
+        page=page, per_page=5 # Show 5 reels per page for example
+    )
+    return render_template('reels_feed.html', title="Reels Feed", 
+                           reels=reels_pagination.items, pagination=reels_pagination)
+
+@app.route('/create_reel', methods=['GET', 'POST'])
+@login_required
+def create_reel():
+    form = ReelForm()
+    if form.validate_on_submit():
+        reel_college_id = current_user.college_id if hasattr(current_user, 'college_id') else None
+        
+        reel = Reel(
+            user_id=current_user.id,
+            college_id=reel_college_id,
+            video_url=form.video_url.data,
+            caption=form.caption.data
+        )
+        db.session.add(reel)
+        db.session.commit()
+        flash('Your reel has been posted!', 'success')
+        return redirect(url_for('reels_feed')) # Or view_reel for the new reel: url_for('view_reel', reel_id=reel.id)
+    return render_template('create_reel.html', title='Create Reel', form=form)
+
+@app.route('/reel/<int:reel_id>', methods=['GET', 'POST'])
+def view_reel(reel_id): # login_required not strictly needed for viewing, but is for commenting/liking
+    reel = Reel.query.get_or_404(reel_id)
+    comment_form = ReelCommentForm()
+    
+    # Handle comment submission
+    if comment_form.validate_on_submit() and current_user.is_authenticated:
+        new_comment = ReelComment(
+            content=comment_form.content.data,
+            user_id=current_user.id,
+            reel_id=reel.id
+        )
+        db.session.add(new_comment)
+        db.session.commit()
+        flash('Your comment has been posted.', 'success')
+        return redirect(url_for('view_reel', reel_id=reel.id))
+    elif comment_form.is_submitted() and not current_user.is_authenticated:
+        flash('You must be logged in to comment.', 'warning')
+        return redirect(url_for('login', next=url_for('view_reel', reel_id=reel.id)))
+
+    # Data for GET request or for re-rendering after failed comment POST
+    comments = reel.comments.order_by(ReelComment.timestamp.asc()).all() # Paginate if many comments
+    like_count = reel.likes.count()
+    user_liked_reel = False
+    if current_user.is_authenticated:
+        user_liked_reel = ReelLike.query.filter_by(user_id=current_user.id, reel_id=reel.id).first() is not None
+        
+    # Increment view count - simple version, could be made more robust
+    # to avoid double counting from same user in short time, etc.
+    # Only increment if not the author viewing their own reel (optional rule)
+    if not current_user.is_authenticated or current_user.id != reel.user_id:
+        reel.views_count = (reel.views_count or 0) + 1
+        db.session.commit()
+
+    return render_template('view_reel.html', title=f"Reel by {reel.author.username}", 
+                           reel=reel, comments=comments, comment_form=comment_form,
+                           like_count=like_count, user_liked_reel=user_liked_reel)
+
+@app.route('/reel/<int:reel_id>/like', methods=['POST'])
+@login_required
+def like_reel(reel_id):
+    reel = Reel.query.get_or_404(reel_id)
+    existing_like = ReelLike.query.filter_by(user_id=current_user.id, reel_id=reel.id).first()
+
+    if existing_like:
+        db.session.delete(existing_like)
+        flash('You unliked the reel.', 'info')
+    else:
+        new_like = ReelLike(user_id=current_user.id, reel_id=reel.id)
+        db.session.add(new_like)
+        flash('You liked the reel!', 'success')
+    
+    db.session.commit()
+    return redirect(url_for('view_reel', reel_id=reel.id))

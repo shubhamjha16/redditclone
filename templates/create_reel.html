@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% import "bootstrap_wtf.html" as wtf %}
+
+{% block app_content %}
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-8 offset-md-2">
+                <h2>Upload New Reel</h2>
+                <hr>
+                <p class="text-muted">Please provide a direct URL to your video (e.g., from a cloud storage or video platform that allows direct linking).</p>
+                {{ wtf.quick_form(form, button_map={'submit': 'primary'}) }}
+            </div>
+        </div>
+    </div>
+{% endblock %}

@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField, SelectField
-from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, Length
+from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, Length, URL # Added URL validator
 from app.models import User, College # Make sure College model is imported
 
 class RegistrationForm(FlaskForm):
@@ -140,3 +140,14 @@ class AdminEditUserForm(FlaskForm):
 class SearchForm(FlaskForm):
     query = StringField('Search', validators=[DataRequired(), Length(min=1, max=200)])
     submit = SubmitField('Go')
+
+# --- Reel Forms ---
+
+class ReelForm(FlaskForm):
+    video_url = StringField('Video URL', validators=[DataRequired(), URL(), Length(max=512)])
+    caption = StringField('Caption', widget=TextArea(), validators=[Length(max=1000)])
+    submit = SubmitField('Post Reel')
+
+class ReelCommentForm(FlaskForm):
+    content = StringField('Add a comment', widget=TextArea(), validators=[DataRequired(), Length(min=1, max=500)])
+    submit = SubmitField('Comment')

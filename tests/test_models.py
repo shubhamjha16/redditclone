@@ -1,7 +1,8 @@
 import pytest
-from app.models import User, College, Post, Comment, Vote, VoteType, Report, ReportStatus, Course, StudyGroup, Event, Notification
+from app.models import User, College, Post, Comment, Vote, VoteType, Report, ReportStatus, Course, StudyGroup, Event, Notification, Reel, ReelComment, ReelLike
 from app import db # For database operations
 from datetime import datetime
+from sqlalchemy.exc import IntegrityError
 
 def test_user_model_creation(new_user): # Uses the new_user fixture from conftest.py
     assert new_user.username == 'testuser'
@@ -267,3 +268,122 @@ def test_followed_posts_basic(init_database, new_college): # Added new_college f
         assert post_u2 not in followed_posts_after_unfollow
         assert post_u1 in followed_posts_after_unfollow # Own posts should still be there
         assert len(followed_posts_after_unfollow) == 1
+
+# --- Tests for Reel, ReelComment, and ReelLike Models ---
+
+def test_reel_model_creation(init_database, new_user, new_college):
+    """Test the creation of a Reel model instance."""
+    with init_database.app.app_context():
+        reel = Reel(
+            user_id=new_user.id,
+            college_id=new_college.id,
+            video_url="http://example.com/video.mp4",
+            caption="Test Reel Caption"
+        )
+        db.session.add(reel)
+        db.session.commit()
+
+        retrieved_reel = Reel.query.get(reel.id)
+        assert retrieved_reel is not None
+        assert retrieved_reel.video_url == "http://example.com/video.mp4"
+        assert retrieved_reel.caption == "Test Reel Caption"
+        assert retrieved_reel.author == new_user
+        assert retrieved_reel.college == new_college
+        assert retrieved_reel.views_count == 0
+        assert isinstance(retrieved_reel.timestamp, datetime)
+
+def test_reel_comment_model(init_database, new_user, new_college):
+    """Test the creation and relationships of a ReelComment model instance."""
+    with init_database.app.app_context():
+        reel = Reel(user_id=new_user.id, college_id=new_college.id, video_url="http://reel.com/v.mp4")
+        db.session.add(reel)
+        db.session.commit()
+
+        comment = ReelComment(
+            content="This is a test comment on a reel.",
+            user_id=new_user.id,
+            reel_id=reel.id
+        )
+        db.session.add(comment)
+        db.session.commit()
+
+        retrieved_comment = ReelComment.query.get(comment.id)
+        assert retrieved_comment is not None
+        assert retrieved_comment.content == "This is a test comment on a reel."
+        assert retrieved_comment.author == new_user
+        assert retrieved_comment.reel == reel
+        assert comment in reel.comments.all()
+        assert isinstance(retrieved_comment.timestamp, datetime)
+
+def test_reel_like_model(init_database, new_user, new_college):
+    """Test the creation, relationships, and unique constraint of a ReelLike model instance."""
+    with init_database.app.app_context():
+        reel = Reel(user_id=new_user.id, college_id=new_college.id, video_url="http://reel.ly/v.mp4")
+        # Need another user for liking to avoid confusion if author likes own reel
+        liker_user = User(username='likeruser', email='liker@example.com')
+        liker_user.set_password('password')
+        db.session.add_all([reel, liker_user])
+        db.session.commit()
+
+        like = ReelLike(
+            user_id=liker_user.id,
+            reel_id=reel.id
+        )
+        db.session.add(like)
+        db.session.commit()
+
+        retrieved_like = ReelLike.query.get(like.id)
+        assert retrieved_like is not None
+        assert retrieved_like.liker == liker_user
+        assert retrieved_like.reel == reel
+        assert like in reel.likes.all()
+        assert isinstance(retrieved_like.timestamp, datetime)
+
+        # Test unique constraint (_user_reel_uc)
+        duplicate_like = ReelLike(user_id=liker_user.id, reel_id=reel.id)
+        db.session.add(duplicate_like)
+        with pytest.raises(IntegrityError):
+            db.session.commit()
+        db.session.rollback() # Rollback the failed transaction
+
+def test_reel_cascade_delete(init_database, new_user, new_college):
+    """Test that ReelComments and ReelLikes are cascade deleted when a Reel is deleted."""
+    with init_database.app.app_context():
+        # Create users
+        reel_author = new_user
+        commenter = User(username='commenter_user', email='commenter@example.com')
+        commenter.set_password('password')
+        liker = User(username='liker_user_cascade', email='likercascade@example.com')
+        liker.set_password('password')
+        db.session.add_all([commenter, liker]) # new_user (reel_author) is already handled by fixture
+        db.session.commit()
+
+
+        reel = Reel(user_id=reel_author.id, college_id=new_college.id, video_url="http://cascade.com/v.mp4")
+        db.session.add(reel)
+        db.session.commit()
+        reel_id = reel.id
+
+        comment = ReelComment(content="A comment to be deleted.", user_id=commenter.id, reel_id=reel_id)
+        db.session.add(comment)
+        db.session.commit()
+        comment_id = comment.id
+
+        like = ReelLike(user_id=liker.id, reel_id=reel_id)
+        db.session.add(like)
+        db.session.commit()
+        like_id = like.id
+
+        # Ensure everything is created
+        assert Reel.query.get(reel_id) is not None
+        assert ReelComment.query.get(comment_id) is not None
+        assert ReelLike.query.get(like_id) is not None
+
+        # Delete the reel
+        db.session.delete(reel)
+        db.session.commit()
+
+        # Assert reel, comment, and like are deleted
+        assert Reel.query.get(reel_id) is None
+        assert ReelComment.query.get(comment_id) is None
+        assert ReelLike.query.get(like_id) is None

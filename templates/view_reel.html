@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% import "bootstrap_wtf.html" as wtf %}
+
+{% block app_content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            {# Reel Video Display #}
+            <div class="reel-video-container mb-3">
+                {% if reel.video_url %}
+                    <div class="embed-responsive embed-responsive-16by9">
+                        <video controls class="embed-responsive-item" src="{{ reel.video_url }}" allowfullscreen>
+                            Your browser does not support the video tag. <a href="{{ reel.video_url }}">Watch Video</a>
+                        </video>
+                    </div>
+                {% else %}
+                    <p class="text-muted text-center">Video not available.</p>
+                {% endif %}
+            </div>
+
+            {# Reel Details #}
+            <h3 class="mt-3">{{ reel.caption|default("Reel", true) }}</h3>
+            <p class="text-muted">
+                Posted by <a href="{{ url_for('user_profile', username=reel.author.username) }}">{{ reel.author.username }}</a>
+                on {{ reel.timestamp.strftime('%Y-%m-%d %H:%M') }}
+                {% if reel.college %}
+                    to <a href="{{ url_for('college_posts', college_id=reel.college.id) }}">{{ reel.college.name }}</a>
+                {% endif %}
+                 | Views: {{ reel.views_count }}
+            </p>
+
+            {# Like Button and Count #}
+            <div>
+                {% if current_user.is_authenticated %}
+                <form action="{{ url_for('reel_like', reel_id=reel.id) }}" method="POST" class="d-inline">
+                    <button type="submit" class="btn {% if user_liked_reel %}btn-danger{% else %}btn-outline-danger{% endif %} btn-sm">
+                        <i class="fas fa-heart"></i> {% if user_liked_reel %}Unlike{% else %}Like{% endif %}
+                    </button>
+                </form>
+                {% else %}
+                <a href="{{ url_for('login', next=request.url) }}" class="btn btn-outline-danger btn-sm">
+                    <i class="fas fa-heart"></i> Like
+                </a>
+                {% endif %}
+                <span class="ml-2 text-muted">{{ like_count }} Likes</span>
+            </div>
+            <hr>
+
+            {# New Comment Form #}
+            <h4>Leave a Comment</h4>
+            {% if current_user.is_authenticated %}
+                {{ wtf.quick_form(comment_form, button_map={'submit': 'primary'}) }}
+            {% else %}
+                <p><a href="{{ url_for('login', next=request.url) }}">Login</a> to post a comment.</p>
+            {% endif %}
+            <hr>
+
+            {# Display Comments #}
+            <h4>Comments</h4>
+            {% if comments %}
+                {% for comment in comments %}
+                    <div class="media mb-3">
+                        {# Placeholder for commenter's profile picture #}
+                        {# <img src="{{ comment.author.profile_picture_url or url_for('static', filename='images/default_avatar.png') }}" class="mr-3 rounded-circle" alt="avatar" style="width: 48px; height: 48px;"> #}
+                        <div class="media-body">
+                            <strong><a href="{{ url_for('user_profile', username=comment.author.username) }}">{{ comment.author.username }}</a></strong>
+                            <small class="text-muted float-right">{{ comment.timestamp.strftime('%Y-%m-%d %H:%M') }}</small>
+                            <p>{{ comment.content }}</p>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>No comments yet. Be the first to comment!</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
