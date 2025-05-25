@@ -1,5 +1,5 @@
 import pytest
-from app.models import User, College, Post, Comment, Vote, VoteType, Report, ReportStatus, Course, StudyGroup, Event, Notification, Reel, ReelComment, ReelLike, AttendanceRecord
+from app.models import User, College, Post, Comment, Vote, VoteType, Report, ReportStatus, Course, StudyGroup, Event, Notification, Reel, ReelComment, ReelLike, AttendanceRecord, CourseEnrollment
 from app import db # For database operations
 from datetime import datetime, date # Added date
 from sqlalchemy.exc import IntegrityError
@@ -526,3 +526,146 @@ def test_attendance_record_backrefs(init_database, new_college):
         assert len(student1.attendance_records.all()) == 1
         assert len(course1.attendance_records.all()) == 1
         assert len(faculty_marker.marked_attendance_records.all()) == 1
+
+# --- Tests for CourseEnrollment Model ---
+
+def test_course_enrollment_creation(init_database, new_user, new_college):
+    """Test the creation of a CourseEnrollment model instance."""
+    with init_database.app.app_context():
+        # new_user can be the student for this test
+        student = new_user 
+        course = Course(name="Enrollment Test Course", course_code="ETC101", college_id=new_college.id)
+        db.session.add(course)
+        db.session.commit()
+
+        enrollment = CourseEnrollment(
+            user_id=student.id,
+            course_id=course.id,
+            status='enrolled', # Explicitly set, though 'enrolled' is default
+            grade_points=3.7
+        )
+        db.session.add(enrollment)
+        db.session.commit()
+
+        retrieved_enrollment = CourseEnrollment.query.get(enrollment.id)
+        assert retrieved_enrollment is not None
+        assert retrieved_enrollment.user_id == student.id
+        assert retrieved_enrollment.course_id == course.id
+        assert isinstance(retrieved_enrollment.enrollment_date, datetime) # Default value check
+        assert retrieved_enrollment.status == 'enrolled' # Default or explicitly set
+        assert retrieved_enrollment.grade_points == 3.7
+        
+        # Test relationships
+        assert retrieved_enrollment.student == student
+        assert retrieved_enrollment.course == course
+        
+        # Test default status if not provided
+        enrollment_default_status = CourseEnrollment(user_id=student.id, course_id=course.id) # Create another to avoid PK error with same student/course
+        # This will fail due to unique constraint if we try to commit same user/course.
+        # Let's use a different student for default status test or different course.
+        student2 = User(username='student_default', email='s_default@example.com', role=User.ROLE_STUDENT)
+        student2.set_password('password')
+        db.session.add(student2)
+        db.session.commit()
+        enrollment_default_status = CourseEnrollment(user_id=student2.id, course_id=course.id)
+        db.session.add(enrollment_default_status)
+        db.session.commit()
+        assert enrollment_default_status.status == 'enrolled'
+
+
+def test_course_enrollment_unique_constraint(init_database, new_user, new_college):
+    """Test the unique constraint (user_id, course_id) for CourseEnrollment."""
+    with init_database.app.app_context():
+        student = new_user
+        course1 = Course(name="Constraint Course 1", course_code="CC101", college_id=new_college.id)
+        course2 = Course(name="Constraint Course 2", course_code="CC102", college_id=new_college.id)
+        student2 = User(username='student_uc_enroll', email='s_uc_enroll@example.com', role=User.ROLE_STUDENT)
+        student2.set_password('password')
+
+        db.session.add_all([course1, course2, student2])
+        db.session.commit() # Student (new_user) is already in session from fixture
+
+        # Initial enrollment
+        enrollment1 = CourseEnrollment(user_id=student.id, course_id=course1.id)
+        db.session.add(enrollment1)
+        db.session.commit()
+        assert enrollment1.id is not None
+
+        # Attempt to create duplicate enrollment (same user, same course)
+        duplicate_enrollment = CourseEnrollment(user_id=student.id, course_id=course1.id, status='waitlisted')
+        db.session.add(duplicate_enrollment)
+        with pytest.raises(IntegrityError):
+            db.session.commit()
+        db.session.rollback()
+
+        # Verify different student works
+        enrollment_diff_student = CourseEnrollment(user_id=student2.id, course_id=course1.id)
+        db.session.add(enrollment_diff_student)
+        db.session.commit()
+        assert enrollment_diff_student.id is not None
+
+        # Verify different course works
+        enrollment_diff_course = CourseEnrollment(user_id=student.id, course_id=course2.id)
+        db.session.add(enrollment_diff_course)
+        db.session.commit()
+        assert enrollment_diff_course.id is not None
+
+def test_course_enrollment_backrefs(init_database, new_user, new_college):
+    """Test the backref relationships for CourseEnrollment."""
+    with init_database.app.app_context():
+        student = new_user
+        course = Course(name="Enrollment Backref Course", course_code="EBC101", college_id=new_college.id)
+        db.session.add(course)
+        db.session.commit()
+
+        enrollment = CourseEnrollment(user_id=student.id, course_id=course.id)
+        db.session.add(enrollment)
+        db.session.commit()
+
+        # Refresh objects
+        db.session.refresh(student)
+        db.session.refresh(course)
+
+        assert enrollment in student.course_enrollments.all()
+        assert enrollment in course.student_enrollments.all()
+        assert len(student.course_enrollments.all()) == 1
+        assert len(course.student_enrollments.all()) == 1
+
+# --- Test for Course.capacity ---
+def test_course_capacity_field(init_database, new_college):
+    """Test the capacity field on the Course model."""
+    with init_database.app.app_context():
+        course = Course(
+            name="Capacity Test Course", 
+            course_code="CTC101", 
+            college_id=new_college.id,
+            instructor="Prof. Capacity"
+        )
+        # Test setting capacity to an integer
+        course.capacity = 50
+        db.session.add(course)
+        db.session.commit()
+
+        retrieved_course = Course.query.get(course.id)
+        assert retrieved_course is not None
+        assert retrieved_course.capacity == 50
+
+        # Test updating capacity to None (nullable is True)
+        retrieved_course.capacity = None
+        db.session.commit()
+        
+        updated_course = Course.query.get(course.id)
+        assert updated_course.capacity is None
+
+        # Test creating a course with capacity initially set
+        course_with_capacity = Course(
+            name="Capacity Init Course", 
+            course_code="CIC101", 
+            college_id=new_college.id,
+            instructor="Dr. Init",
+            capacity=30
+        )
+        db.session.add(course_with_capacity)
+        db.session.commit()
+        retrieved_course_init = Course.query.get(course_with_capacity.id)
+        assert retrieved_course_init.capacity == 30

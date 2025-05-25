@@ -1,8 +1,8 @@
 import pytest
-from app.models import User, College, Post, Comment, Reel, ReelComment, ReelLike, Course, AttendanceRecord # Added Course, AttendanceRecord
+from app.models import User, College, Post, Comment, Reel, ReelComment, ReelLike, Course, AttendanceRecord, CourseEnrollment # Added CourseEnrollment
 from app import db
 from flask import url_for # For generating URLs in tests
-from datetime import date, timedelta # Added date and timedelta
+from datetime import date, timedelta, datetime # Added datetime for enrollment_date
     response = client.get('/', follow_redirects=True)
     assert response.status_code == 200
     assert b"Sign In" in response.data # Should be redirected to login
@@ -449,6 +449,343 @@ def test_reels_feed_route(test_auth_client, client, init_database, new_user, new
     unauth_response_feed = client.get(url_for('reels_feed'), follow_redirects=False)
     assert unauth_response_feed.status_code == 302
     assert '/login' in unauth_response_feed.location
+
+# --- Tests for Enrollment Management and Display ---
+
+def test_student_enroll_unenroll_routes(test_auth_client, init_database, new_college):
+    """Test student-facing /course/<id>/enroll and /course/<id>/unenroll routes."""
+    with init_database.app.app_context():
+        course = Course(name="Test Enroll Course", course_code="ENRL101", college_id=new_college.id, capacity=1)
+        student1 = User(username='enroll_s1', email='enroll_s1@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        student1.set_password('password')
+        student2 = User(username='enroll_s2', email='enroll_s2@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        student2.set_password('password')
+        db.session.add_all([course, student1, student2])
+        db.session.commit()
+
+    client_s1 = test_auth_client(student1)
+    client_s2 = test_auth_client(student2)
+    unauth_client = init_database.test_client()
+
+    # 1. Enroll student1 (success)
+    response_s1_enroll = client_s1.post(url_for('enroll_in_course', course_id=course.id), follow_redirects=True)
+    assert response_s1_enroll.status_code == 200
+    assert b"You have successfully enrolled in the course!" in response_s1_enroll.data
+    with init_database.app.app_context():
+        enrollment_s1 = CourseEnrollment.query.filter_by(user_id=student1.id, course_id=course.id).first()
+        assert enrollment_s1 is not None
+        assert enrollment_s1.status == 'enrolled'
+
+    # 2. Enroll student1 again (already enrolled)
+    response_s1_enroll_again = client_s1.post(url_for('enroll_in_course', course_id=course.id), follow_redirects=True)
+    assert response_s1_enroll_again.status_code == 200
+    assert b"You are already enrolled in this course." in response_s1_enroll_again.data
+    with init_database.app.app_context():
+        assert CourseEnrollment.query.filter_by(user_id=student1.id, course_id=course.id).count() == 1
+
+    # 3. Enroll student2 (course full)
+    response_s2_enroll_full = client_s2.post(url_for('enroll_in_course', course_id=course.id), follow_redirects=True)
+    assert response_s2_enroll_full.status_code == 200
+    assert b"This course is currently full" in response_s2_enroll_full.data
+    with init_database.app.app_context():
+        assert CourseEnrollment.query.filter_by(user_id=student2.id, course_id=course.id).first() is None
+
+    # 4. student1 unenrolls
+    response_s1_unenroll = client_s1.post(url_for('unenroll_from_course', course_id=course.id), follow_redirects=True)
+    assert response_s1_unenroll.status_code == 200
+    assert b"You have successfully unenrolled from the course." in response_s1_unenroll.data
+    with init_database.app.app_context():
+        enrollment_s1_dropped = CourseEnrollment.query.filter_by(user_id=student1.id, course_id=course.id).first()
+        assert enrollment_s1_dropped is not None
+        assert enrollment_s1_dropped.status == 'dropped'
+
+    # 5. student1 unenrolls again (not actively enrolled)
+    response_s1_unenroll_again = client_s1.post(url_for('unenroll_from_course', course_id=course.id), follow_redirects=True)
+    assert response_s1_unenroll_again.status_code == 200
+    assert b"You are not currently enrolled in this course" in response_s1_unenroll_again.data
+
+    # 6. student2 enrolls (now space available after s1 dropped and re-enrollment logic is for 'dropped' status)
+    # The current enroll_in_course logic will try to re-enroll s1 if they are 'dropped'.
+    # To test s2 enrolling, s1's record needs to be fully removed or s2 tries to enroll in a different course.
+    # For simplicity, let's assume s2 can enroll now that s1 is 'dropped'.
+    # The capacity check counts 'enrolled' status.
+    response_s2_enroll_success = client_s2.post(url_for('enroll_in_course', course_id=course.id), follow_redirects=True)
+    assert response_s2_enroll_success.status_code == 200
+    assert b"You have successfully enrolled in the course!" in response_s2_enroll_success.data
+    with init_database.app.app_context():
+        enrollment_s2 = CourseEnrollment.query.filter_by(user_id=student2.id, course_id=course.id).first()
+        assert enrollment_s2 is not None
+        assert enrollment_s2.status == 'enrolled'
+
+    # 7. Authentication checks
+    response_unauth_enroll = unauth_client.post(url_for('enroll_in_course', course_id=course.id), follow_redirects=False)
+    assert response_unauth_enroll.status_code == 302
+    assert '/login' in response_unauth_enroll.location
+
+    response_unauth_unenroll = unauth_client.post(url_for('unenroll_from_course', course_id=course.id), follow_redirects=False)
+    assert response_unauth_unenroll.status_code == 302
+    assert '/login' in response_unauth_unenroll.location
+
+
+def test_manage_enrollments_route_permissions(test_auth_client, init_database, new_college, new_course):
+    """Test permission checks for /course/<id>/manage_enrollments."""
+    course = new_course
+    with init_database.app.app_context():
+        admin_user = User(username='enroll_admin', email='ea@example.com', role=User.ROLE_ADMIN, college_id=new_college.id)
+        admin_user.set_password('password')
+        mgmt_user = User(username='enroll_mgmt', email='em@example.com', role=User.ROLE_MANAGEMENT, college_id=new_college.id)
+        mgmt_user.set_password('password')
+        faculty_user = User(username='enroll_faculty', email='ef@example.com', role=User.ROLE_FACULTY, college_id=new_college.id)
+        faculty_user.set_password('password')
+        student_user = User(username='enroll_student_perm', email='esp@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        student_user.set_password('password')
+        db.session.add_all([admin_user, mgmt_user, faculty_user, student_user, course])
+        db.session.commit()
+
+    # Admin access
+    client_admin = test_auth_client(admin_user)
+    response_admin_get = client_admin.get(url_for('manage_course_enrollments', course_id=course.id))
+    assert response_admin_get.status_code == 200
+    assert b"Manage Enrollments" in response_admin_get.data
+
+    # Management access
+    client_mgmt = test_auth_client(mgmt_user)
+    response_mgmt_get = client_mgmt.get(url_for('manage_course_enrollments', course_id=course.id))
+    assert response_mgmt_get.status_code == 200
+    assert b"Manage Enrollments" in response_mgmt_get.data
+
+    # Faculty access (currently forbidden as per route logic, can be changed later)
+    client_faculty = test_auth_client(faculty_user)
+    response_faculty_get = client_faculty.get(url_for('manage_course_enrollments', course_id=course.id), follow_redirects=True)
+    assert response_faculty_get.status_code == 200 # Redirect
+    assert b"You do not have permission to manage enrollments" in response_faculty_get.data
+
+    # Student access (forbidden)
+    client_student = test_auth_client(student_user)
+    response_student_get = client_student.get(url_for('manage_course_enrollments', course_id=course.id), follow_redirects=True)
+    assert response_student_get.status_code == 200 # Redirect
+    assert b"You do not have permission to manage enrollments" in response_student_get.data
+
+
+def test_manage_enrollments_actions(test_auth_client, init_database, new_college, new_course):
+    """Test add, change status, and remove actions on manage_enrollments route."""
+    course = new_course
+    course.capacity = 2 # Set a capacity for testing full course scenarios
+    
+    with init_database.app.app_context():
+        admin_user = User(username='enroll_admin2', email='ea2@example.com', role=User.ROLE_ADMIN, college_id=new_college.id)
+        admin_user.set_password('password')
+        student1 = User(username='enroll_s_action1', email='esa1@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        student1.set_password('password')
+        student2 = User(username='enroll_s_action2', email='esa2@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        student2.set_password('password')
+        db.session.add_all([admin_user, student1, student2, course])
+        db.session.commit()
+
+    client = test_auth_client(admin_user)
+
+    # 1. Add Student (success)
+    response_add = client.post(url_for('manage_course_enrollments', course_id=course.id), data={
+        'student_username': student1.username,
+        'status': 'enrolled',
+        'submit_add_student': 'Add/Update Student Enrollment' # Name of the submit button
+    }, follow_redirects=True)
+    assert response_add.status_code == 200
+    assert f"{student1.username} has been enrolled in the course.".encode() in response_add.data
+    with init_database.app.app_context():
+        enrollment = CourseEnrollment.query.filter_by(user_id=student1.id, course_id=course.id).first()
+        assert enrollment is not None
+        assert enrollment.status == 'enrolled'
+
+    # 2. Add non-existent student
+    response_add_nonexist = client.post(url_for('manage_course_enrollments', course_id=course.id), data={
+        'student_username': 'ghoststudent',
+        'status': 'enrolled',
+        'submit_add_student': 'Add/Update Student Enrollment'
+    }, follow_redirects=True)
+    assert response_add_nonexist.status_code == 200
+    assert b"Student with that username or email does not exist." in response_add_nonexist.data # From form validation
+
+    # 3. Add student to full course (enroll student2 first to make it full)
+    client.post(url_for('manage_course_enrollments', course_id=course.id), data={
+        'student_username': student2.username, 'status': 'enrolled', 'submit_add_student': 'Add/Update Student Enrollment'
+    }) # student2 now occupies the last spot
+    
+    student3 = User(username='enroll_s_action3', email='esa3@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+    with init_database.app.app_context():
+        student3.set_password('password')
+        db.session.add(student3)
+        db.session.commit()
+
+    response_add_full = client.post(url_for('manage_course_enrollments', course_id=course.id), data={
+        'student_username': student3.username,
+        'status': 'enrolled',
+        'submit_add_student': 'Add/Update Student Enrollment'
+    }, follow_redirects=True)
+    assert response_add_full.status_code == 200
+    assert f'Cannot enroll {student3.username}. Course is full'.encode() in response_add_full.data
+
+    # 4. Change Status
+    response_change_status = client.post(url_for('manage_course_enrollments', course_id=course.id), data={
+        'action': 'change_status',
+        'student_id': student1.id,
+        'new_status': 'waitlisted' # Assuming this comes from the select field for that student
+    }, follow_redirects=True)
+    assert response_change_status.status_code == 200
+    assert f"{student1.username}'s status changed to waitlisted.".encode() in response_change_status.data
+    with init_database.app.app_context():
+        assert CourseEnrollment.query.filter_by(user_id=student1.id, course_id=course.id).first().status == 'waitlisted'
+        # Course should now have space (student1 is waitlisted, student2 is enrolled)
+        assert CourseEnrollment.query.filter_by(course_id=course.id, status='enrolled').count() == 1 
+
+
+    # 5. Change status to 'enrolled' for student1 (course has capacity again)
+    response_change_to_enrolled = client.post(url_for('manage_course_enrollments', course_id=course.id), data={
+        'action': 'change_status',
+        'student_id': student1.id,
+        'new_status': 'enrolled'
+    }, follow_redirects=True)
+    assert response_change_to_enrolled.status_code == 200
+    assert f"{student1.username}'s status changed to enrolled.".encode() in response_change_to_enrolled.data
+    with init_database.app.app_context():
+        assert CourseEnrollment.query.filter_by(user_id=student1.id, course_id=course.id).first().status == 'enrolled'
+        # Course is full again
+        assert CourseEnrollment.query.filter_by(course_id=course.id, status='enrolled').count() == 2
+
+
+    # 6. Remove Enrollment
+    response_remove = client.post(url_for('manage_course_enrollments', course_id=course.id), data={
+        'action': 'remove_enrollment',
+        'student_id': student1.id
+    }, follow_redirects=True)
+    assert response_remove.status_code == 200
+    assert f"{student1.username}'s enrollment record has been removed".encode() in response_remove.data
+    with init_database.app.app_context():
+        assert CourseEnrollment.query.filter_by(user_id=student1.id, course_id=course.id).first() is None
+
+
+def test_view_course_enrollment_display(test_auth_client, init_database, new_user, new_college, new_course):
+    """Test display of enrollment info on view_course page."""
+    course = new_course
+    course.capacity = 2
+    with init_database.app.app_context():
+        student1 = new_user # new_user is student role by default
+        student2 = User(username='enroll_display_s2', email='eds2@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        student2.set_password('password')
+        db.session.add_all([course, student2]) # student1 (new_user) already added by fixture
+        db.session.commit()
+        
+        # Enroll student1
+        enrollment1 = CourseEnrollment(user_id=student1.id, course_id=course.id, status='enrolled')
+        db.session.add(enrollment1)
+        db.session.commit()
+
+    client_s1 = test_auth_client(student1)
+    response_s1 = client_s1.get(url_for('view_course', course_id=course.id))
+    assert response_s1.status_code == 200
+    assert f"Capacity: {course.capacity}".encode() in response_s1.data
+    assert b"Currently Enrolled: 1" in response_s1.data
+    assert b"Unenroll</button>" in response_s1.data # s1 should see Unenroll button
+
+    client_s2 = test_auth_client(student2)
+    response_s2 = client_s2.get(url_for('view_course', course_id=course.id))
+    assert response_s2.status_code == 200
+    assert b"Currently Enrolled: 1" in response_s2.data # Still 1, s2 not enrolled
+    assert b"Enroll</button>" in response_s2.data # s2 should see Enroll button
+
+    # Enroll student2, course becomes full
+    with init_database.app.app_context():
+        enrollment2 = CourseEnrollment(user_id=student2.id, course_id=course.id, status='enrolled')
+        db.session.add(enrollment2)
+        db.session.commit()
+
+    response_s2_full = client_s2.get(url_for('view_course', course_id=course.id)) # s2 is now enrolled
+    assert b"Currently Enrolled: 2" in response_s2_full.data
+    assert b"Unenroll</button>" in response_s2_full.data # s2 now sees unenroll
+
+    # A third student tries to view
+    with init_database.app.app_context():
+        student3 = User(username='enroll_display_s3', email='eds3@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        student3.set_password('password')
+        db.session.add(student3)
+        db.session.commit()
+    
+    client_s3 = test_auth_client(student3)
+    response_s3_course_full = client_s3.get(url_for('view_course', course_id=course.id))
+    assert b"Currently Enrolled: 2" in response_s3_course_full.data
+    assert b"Course Full (Enroll)</button>" in response_s3_course_full.data # s3 sees Course Full
+
+
+def test_user_profile_enrolled_courses_display(test_auth_client, init_database, new_user, new_college, new_course):
+    """Test display of enrolled courses on user_profile page."""
+    student = new_user
+    course = new_course
+    with init_database.app.app_context():
+        db.session.add_all([student, course]) # Ensure they are in session
+        enrollment = CourseEnrollment(user_id=student.id, course_id=course.id, status='enrolled')
+        db.session.add(enrollment)
+        db.session.commit()
+
+    client = test_auth_client(student)
+    response = client.get(url_for('user_profile', username=student.username))
+    assert response.status_code == 200
+    assert b"Enrolled Courses" in response.data
+    assert course.name.encode() in response.data
+    assert course.course_code.encode() in response.data
+    assert b"badge-success" in response.data # "Enrolled" badge
+
+def test_list_college_courses_enrollment_info(client, init_database, new_college, new_course):
+    """Test display of enrollment info (count, capacity, progress bar) on list_college_courses page."""
+    course = new_course
+    course.capacity = 10
+    with init_database.app.app_context():
+        student1 = User(username='list_c_s1', email='lcs1@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        student1.set_password('password')
+        db.session.add_all([course, student1])
+        db.session.commit()
+        # Enroll student1
+        enrollment1 = CourseEnrollment(user_id=student1.id, course_id=course.id, status='enrolled')
+        db.session.add(enrollment1)
+        db.session.commit()
+
+    response = client.get(url_for('list_college_courses', college_id=new_college.id))
+    assert response.status_code == 200
+    assert course.name.encode() in response.data
+    assert f"Capacity: {course.capacity}".encode() in response.data
+    assert b"Enrolled: 1" in response.data
+    assert b"10%" in response.data # (1/10)*100
+    assert b'class="progress-bar' in response.data # Check for progress bar element
+
+def test_take_attendance_uses_enrolled_students(test_auth_client, init_database, new_college, new_course):
+    """Test that take_attendance page lists only enrolled students."""
+    course = new_course
+    with init_database.app.app_context():
+        faculty = User(username='att_faculty', email='attf@example.com', role=User.ROLE_FACULTY, college_id=new_college.id)
+        faculty.set_password('password')
+        s_enrolled = User(username='s_enrolled', email='se@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        s_enrolled.set_password('password')
+        s_dropped = User(username='s_dropped', email='sd@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        s_dropped.set_password('password')
+        s_other_course = User(username='s_other', email='so@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        s_other_course.set_password('password')
+        db.session.add_all([faculty, s_enrolled, s_dropped, s_other_course, course])
+        db.session.commit()
+
+        # Enroll s_enrolled
+        CourseEnrollment.query.delete() # Clear any prior enrollments for this course from other tests
+        db.session.commit()
+        
+        enrollment_active = CourseEnrollment(user_id=s_enrolled.id, course_id=course.id, status='enrolled')
+        enrollment_dropped = CourseEnrollment(user_id=s_dropped.id, course_id=course.id, status='dropped')
+        db.session.add_all([enrollment_active, enrollment_dropped])
+        db.session.commit()
+
+    client = test_auth_client(faculty)
+    response = client.get(url_for('take_attendance', course_id=course.id))
+    assert response.status_code == 200
+    assert s_enrolled.username.encode() in response.data
+    assert s_dropped.username.encode() not in response.data
+    assert s_other_course.username.encode() not in response.data
 
 # --- Tests for Attendance Routes ---
 

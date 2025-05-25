@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% import "bootstrap_wtf.html" as wtf %}
+
+{% block app_content %}
+<div class="container mt-4">
+    <h3>Manage Enrollments: {{ course.name }}</h3>
+    <p>
+        Code: {{ course.course_code }} | 
+        Capacity: {{ course.capacity if course.capacity is not none else 'N/A' }} | 
+        {# Calculate enrolled count from the list of all enrollments passed #}
+        Currently Enrolled: {{ enrollments|selectattr('status', 'equalto', 'enrolled')|list|length }} / {{ course.capacity if course.capacity is not none else 'N/A' }}
+    </p>
+    <hr>
+
+    <h4>Add or Update Student Enrollment</h4>
+    {{ wtf.quick_form(add_student_form, button_map={'submit_add_student':'primary'}) }}
+    <hr>
+
+    <h4>Current Enrollments</h4>
+    {% if enrollments and enrollments|length > 0 %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm">
+                <thead class="thead-light">
+                    <tr>
+                        <th>Student</th>
+                        <th>Email</th>
+                        <th>Enrollment Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for enrollment in enrollments %}
+                        <tr>
+                            <td><a href="{{ url_for('user_profile', username=enrollment.student.username) }}">{{ enrollment.student.username }}</a></td>
+                            <td>{{ enrollment.student.email }}</td>
+                            <td>{{ enrollment.enrollment_date.strftime('%Y-%m-%d %H:%M') if enrollment.enrollment_date else 'N/A' }}</td>
+                            <td>
+                                <form method="POST" action="{{ url_for('manage_course_enrollments', course_id=course.id) }}" class="form-inline">
+                                    {{ change_status_form.hidden_tag() }} {# CSRF token from the general change_status_form #}
+                                    <input type="hidden" name="action" value="change_status">
+                                    <input type="hidden" name="student_id" value="{{ enrollment.student.id }}">
+                                    <select name="new_status" class="form-control form-control-sm mr-2" style="min-width: 120px;">
+                                        <option value="enrolled" {% if enrollment.status == 'enrolled' %}selected{% endif %}>Enrolled</option>
+                                        <option value="waitlisted" {% if enrollment.status == 'waitlisted' %}selected{% endif %}>Waitlisted</option>
+                                        <option value="dropped" {% if enrollment.status == 'dropped' %}selected{% endif %}>Dropped</option>
+                                        <option value="completed" {% if enrollment.status == 'completed' %}selected{% endif %}>Completed</option>
+                                    </select>
+                                    <button type="submit" class="btn btn-info btn-sm">Update</button>
+                                </form>
+                            </td>
+                            <td>
+                                <form method="POST" action="{{ url_for('manage_course_enrollments', course_id=course.id) }}" style="display: inline;">
+                                    {{ change_status_form.hidden_tag() }} {# Re-using for CSRF, assumes one form instance's token is okay for multiple action buttons if they are part of one larger conceptual "management" form #}
+                                    <input type="hidden" name="action" value="remove_enrollment">
+                                    <input type="hidden" name="student_id" value="{{ enrollment.student.id }}">
+                                    <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to remove this student\'s enrollment record completely? This action cannot be undone.');">
+                                        <i class="fas fa-trash"></i> Remove
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p>No students are currently enrolled or recorded for this course.</p>
+    {% endif %}
+</div>
+{% endblock %}

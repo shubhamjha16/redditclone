@@ -17,6 +17,15 @@
     *   Course discussions.
     *   Study group organization.
     *   Event creation and management.
+    *   **Student Enrollment Management:**
+        *   Courses can have defined capacities.
+        *   Students can enroll in and unenroll from courses.
+        *   Enrollment is subject to course capacity (waitlist functionality can be a future addition).
+        *   Admins and Management can manage enrollments (add, drop, change student status in courses).
+        *   User profiles display enrolled courses.
+        *   Course listings show current enrollment counts vs. capacity.
+        *   Attendance system now uses enrollment data for accurate rosters.
+        *   Introduction of a 'Management' user role with permissions for enrollment management.
 *   Administrative Tools:
     *   College management (create, edit).
     *   User management (verify affiliation, change roles).

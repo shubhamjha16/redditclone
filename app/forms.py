@@ -1,7 +1,7 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, BooleanField, SubmitField, SelectField
-from wtforms.fields import DateTimeField, HiddenField, DateField, FieldList, FormField # Added HiddenField, DateField, FieldList, FormField
-from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, Length, URL, Optional # Added URL validator and Optional
+from wtforms import StringField, PasswordField, BooleanField, SubmitField, SelectField, IntegerField # Added IntegerField
+from wtforms.fields import DateTimeField, HiddenField, DateField, FieldList, FormField 
+from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, Length, URL, Optional, NumberRange # Added NumberRange
 from app.models import User, College # Make sure College model is imported
 
 class RegistrationForm(FlaskForm):
@@ -26,7 +26,8 @@ class RegistrationForm(FlaskForm):
     role = SelectField('Role', choices=[
         (User.ROLE_STUDENT, 'Student'), 
         (User.ROLE_ALUMNI, 'Alumni'), 
-        (User.ROLE_FACULTY, 'Faculty')
+        (User.ROLE_FACULTY, 'Faculty'),
+        (User.ROLE_MANAGEMENT, 'Management')
     ], validators=[DataRequired()])
     profile_picture_url = StringField('Profile Picture URL (Optional)', validators=[Length(max=255)])
     bio = StringField('Bio (Optional)', widget=TextArea(), validators=[Length(max=500)])
@@ -84,6 +85,7 @@ class CourseForm(FlaskForm):
     course_code = StringField('Course Code (e.g., CS101)', validators=[DataRequired(), Length(max=20)])
     description = StringField('Description', widget=TextArea(), validators=[Length(max=5000)])
     instructor = StringField('Instructor Name (Optional)', validators=[Length(max=100)])
+    capacity = IntegerField('Capacity (Optional)', validators=[Optional(), NumberRange(min=1, message="Capacity must be at least 1.")])
     submit = SubmitField('Save Course')
 
 def get_college_courses(college_id):
@@ -133,6 +135,7 @@ class AdminEditUserForm(FlaskForm):
         (User.ROLE_STUDENT, 'Student'),
         (User.ROLE_ALUMNI, 'Alumni'),
         (User.ROLE_FACULTY, 'Faculty'),
+        (User.ROLE_MANAGEMENT, 'Management'),
         (User.ROLE_ADMIN, 'Admin')
     ], validators=[DataRequired()])
     is_college_verified = BooleanField('College Affiliation Verified')
@@ -197,3 +200,32 @@ class ViewAttendanceForm(FlaskForm):
     start_date = DateField('Start Date (Optional)', format='%Y-%m-%d', validators=[Optional()])
     end_date = DateField('End Date (Optional)', format='%Y-%m-%d', validators=[Optional()])
     submit = SubmitField('View Attendance')
+
+# --- Course Enrollment Management Forms (Admin/Faculty/Management) ---
+
+class AddStudentEnrollmentForm(FlaskForm):
+    student_username = StringField('Student Username or Email', validators=[DataRequired()])
+    status = SelectField('Enrollment Status', choices=[
+        ('enrolled', 'Enrolled'),
+        ('waitlisted', 'Waitlisted'),
+        ('dropped', 'Dropped')
+    ], validators=[DataRequired()])
+    submit_add_student = SubmitField('Add/Update Student Enrollment')
+
+    def validate_student_username(self, student_username):
+        # Check if the user exists by username or email
+        user = User.query.filter((User.username == student_username.data) | (User.email == student_username.data)).first()
+        if not user:
+            raise ValidationError('Student with that username or email does not exist.')
+        # Optionally, check if the user is a student, or allow any role to be enrolled
+        # if user.role != User.ROLE_STUDENT:
+        #     raise ValidationError('This user is not registered as a student.')
+
+class ChangeEnrollmentStatusForm(FlaskForm):
+    status = SelectField('New Status', choices=[
+        ('enrolled', 'Enrolled'),
+        ('waitlisted', 'Waitlisted'),
+        ('dropped', 'Dropped'),
+        ('completed', 'Completed')
+    ], validators=[DataRequired()])
+    submit_change_status = SubmitField('Change Status')

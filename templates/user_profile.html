@@ -126,6 +126,27 @@
                     {% endif %}
                 </div>
             </div>
+
+            {# Enrolled Courses Section #}
+            <div class="card mt-4">
+                <div class="card-header">
+                    Enrolled Courses
+                </div>
+                <div class="card-body">
+                    {% if enrolled_courses and enrolled_courses|length > 0 %}
+                        <ul class="list-group list-group-flush">
+                            {% for course in enrolled_courses %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <a href="{{ url_for('view_course', course_id=course.id) }}">{{ course.name }} ({{ course.course_code }})</a>
+                                    <span class="badge badge-success badge-pill">Enrolled</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p>{{ user.username }} is not currently enrolled in any courses.</p>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
 </div>

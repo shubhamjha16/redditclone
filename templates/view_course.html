@@ -11,7 +11,44 @@
         <div class="card-body">
             <h5 class="card-title">Instructor: {{ course.instructor if course.instructor else "Not specified" }}</h5>
             <p class="card-text"><strong>Description:</strong><br>{{ course.description if course.description else "No description provided." }}</p>
-            <p class="card-text"><small class="text-muted">College: {{ course.college.name }}</small></p>
+            <p class="card-text">
+                <small class="text-muted">College: {{ course.college.name }}</small><br>
+                <small class="text-muted">
+                    Capacity: {{ course.capacity if course.capacity is not none else "N/A" }} | 
+                    Currently Enrolled: {{ enrolled_count if enrolled_count is not none else "N/A" }}
+                </small>
+            </p>
+
+            {# Enrollment Buttons - Assuming enrolled_count and current_enrollment are passed from the route #}
+            {% if current_user.is_authenticated %}
+                <div class="mt-3">
+                    {% if current_enrollment and current_enrollment.status == 'enrolled' %}
+                        <form action="{{ url_for('unenroll_from_course', course_id=course.id) }}" method="POST" style="display: inline;">
+                            <button type="submit" class="btn btn-danger">Unenroll</button>
+                        </form>
+                    {% elif current_enrollment and current_enrollment.status == 'dropped' %}
+                        {% if course.capacity is none or enrolled_count < course.capacity %}
+                            <form action="{{ url_for('enroll_in_course', course_id=course.id) }}" method="POST" style="display: inline;">
+                                <button type="submit" class="btn btn-success">Re-enroll</button>
+                            </form>
+                        {% else %}
+                            <button type="button" class="btn btn-secondary" disabled>Course Full (Re-enroll)</button>
+                        {% endif %}
+                    {% else %} {# No enrollment or status like 'waitlisted', 'completed' #}
+                        {% if course.capacity is none or enrolled_count < course.capacity %}
+                            <form action="{{ url_for('enroll_in_course', course_id=course.id) }}" method="POST" style="display: inline;">
+                                <button type="submit" class="btn btn-primary">Enroll</button>
+                            </form>
+                        {% else %}
+                             <button type="button" class="btn btn-secondary" disabled>Course Full (Enroll)</button>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            {% else %}
+                <div class="mt-3">
+                    <a href="{{ url_for('login', next=request.url) }}" class="btn btn-primary">Login to Enroll</a>
+                </div>
+            {% endif %}
         </div>
     </div>
 

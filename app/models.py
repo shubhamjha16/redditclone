@@ -23,6 +23,7 @@ class User(UserMixin, db.Model):
     ROLE_STUDENT = 'student'
     ROLE_ALUMNI = 'alumni'
     ROLE_FACULTY = 'faculty' # New role for faculty members
+    ROLE_MANAGEMENT = 'management' # New role for management/staff
     ROLE_ADMIN = 'admin' # For site administration
     role = db.Column(db.String(20), default=ROLE_STUDENT, nullable=False)
     is_college_verified = db.Column(db.Boolean, default=False, nullable=False) # True if college affiliation is verified
@@ -135,6 +136,7 @@ class Course(db.Model):
     description = db.Column(db.Text)
     instructor = db.Column(db.String(100)) # Simple text field for instructor name
     college_id = db.Column(db.Integer, db.ForeignKey('college.id'), nullable=False)
+    capacity = db.Column(db.Integer, nullable=True) # Max number of students
     
     college = db.relationship('College', backref=db.backref('courses', lazy='dynamic'))
     study_groups = db.relationship('StudyGroup', backref='course', lazy='dynamic')
@@ -303,3 +305,21 @@ class AttendanceRecord(db.Model):
 
     def __repr__(self):
         return f'<AttendanceRecord {self.id} for User {self.user_id} in Course {self.course_id} on {self.date} - {self.status}>'
+
+# --- Course Enrollment Model ---
+
+class CourseEnrollment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True) # The student enrolling
+    course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=False, index=True) # The course being enrolled in
+    enrollment_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    status = db.Column(db.String(20), nullable=False, default='enrolled', index=True) # e.g., 'enrolled', 'waitlisted', 'dropped', 'completed'
+    grade_points = db.Column(db.Float, nullable=True) # Optional: e.g., 4.0, 3.7
+
+    student = db.relationship('User', backref=db.backref('course_enrollments', lazy='dynamic'))
+    course = db.relationship('Course', backref=db.backref('student_enrollments', lazy='dynamic'))
+
+    __table_args__ = (db.UniqueConstraint('user_id', 'course_id', name='_student_course_enrollment_uc'),)
+
+    def __repr__(self):
+        return f'<CourseEnrollment User {self.user_id} in Course {self.course_id} - Status: {self.status}>'

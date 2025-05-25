@@ -5,11 +5,12 @@ from app.forms import (
     CourseForm, StudyGroupForm, EventForm, get_college_courses,
     CollegeForm, ReportForm, ReportStatusUpdateForm, AdminEditUserForm,
     SearchForm, EditProfileForm, ReelForm, ReelCommentForm, # Added Reel forms
-    TakeAttendanceForm, StudentAttendanceEntryForm, ViewAttendanceForm # Added Attendance forms
+    TakeAttendanceForm, StudentAttendanceEntryForm, ViewAttendanceForm, # Added Attendance forms
+    AddStudentEnrollmentForm, ChangeEnrollmentStatusForm # Added Enrollment Management forms
 )
 from app.models import (User, College, Post, Comment, Vote, VoteType, 
                         Course, StudyGroup, Event, Report, ReportStatus, Notification, # Added Notification
-                        Reel, ReelComment, ReelLike, AttendanceRecord) # Added Reel and Attendance models
+                        Reel, ReelComment, ReelLike, AttendanceRecord, CourseEnrollment) # Added Reel, Attendance and CourseEnrollment models
 from app.utils import get_target_score, send_notification # Added send_notification
 from flask_login import login_user, logout_user, current_user, login_required
 from sqlalchemy import or_
@@ -267,8 +268,16 @@ def list_college_courses(college_id):
     courses_pagination = Course.query.filter_by(college_id=college.id)\
         .order_by(Course.name.asc())\
         .paginate(page=page, per_page=10)
+    
+    courses_on_page = courses_pagination.items
+    enrollment_info = {}
+    for course_item in courses_on_page:
+        enrolled_count = CourseEnrollment.query.filter_by(course_id=course_item.id, status='enrolled').count()
+        enrollment_info[course_item.id] = enrolled_count
+        
     return render_template('college_courses.html', title=f"Courses at {college.name}", 
-                           college=college, courses=courses_pagination)
+                           college=college, courses_pagination=courses_pagination, 
+                           enrollment_info=enrollment_info)
 
 @app.route('/college/<int:college_id>/course/create', methods=['GET', 'POST'])
 @login_required
@@ -290,7 +299,8 @@ def create_course(college_id):
                 course_code=form.course_code.data,
                 description=form.description.data,
                 instructor=form.instructor.data,
-                college_id=college.id
+                college_id=college.id,
+                capacity=form.capacity.data
             )
             db.session.add(course)
             db.session.commit()
@@ -301,8 +311,18 @@ def create_course(college_id):
 @app.route('/course/<int:course_id>', methods=['GET'])
 def view_course(course_id):
     course = Course.query.get_or_404(course_id)
+    
+    # Calculate enrolled_count
+    enrolled_count = CourseEnrollment.query.filter_by(course_id=course.id, status='enrolled').count()
+    
+    # Determine current_enrollment for the logged-in user
+    current_enrollment = None
+    if current_user.is_authenticated:
+        current_enrollment = CourseEnrollment.query.filter_by(user_id=current_user.id, course_id=course.id).first()
+        
     # study_groups already available via course.study_groups relationship
-    return render_template('view_course.html', title=course.name, course=course)
+    return render_template('view_course.html', title=course.name, course=course,
+                           enrolled_count=enrolled_count, current_enrollment=current_enrollment)
 
 
 # -------------------------- Study Group Routes --------------------------
@@ -689,8 +709,15 @@ def user_profile(username):
     user_posts = user.posts.order_by(Post.timestamp.desc()).limit(5).all() # Show recent 5 posts
     user_comments = user.comments.order_by(Comment.timestamp.desc()).limit(5).all() # Show recent 5 comments
     
+    # Fetch enrolled courses
+    enrolled_courses = Course.query.join(CourseEnrollment).filter(
+        CourseEnrollment.user_id == user.id, 
+        CourseEnrollment.status == 'enrolled'
+    ).order_by(Course.name.asc()).all()
+    
     return render_template('user_profile.html', title=f"Profile: {user.username}", 
-                           user=user, user_posts=user_posts, user_comments=user_comments)
+                           user=user, user_posts=user_posts, user_comments=user_comments,
+                           enrolled_courses=enrolled_courses)
 
 
 # -------------------------- Notification Routes --------------------------
@@ -895,23 +922,30 @@ def take_attendance(course_id):
         form.course_id.data = course # Pre-select current course
         form.date.data = date.today() # Default to today
         
-        # Simplified: Get students from the course's college. Needs proper enrollment system.
-        students_in_college = User.query.filter_by(college_id=course.college_id, role=User.ROLE_STUDENT).order_by(User.username).all()
+        # Fetch enrolled students for the course
+        students_for_attendance = User.query.join(CourseEnrollment).filter(
+            CourseEnrollment.course_id == course.id,
+            CourseEnrollment.status == 'enrolled'
+        ).order_by(User.username.asc()).all()
         
         # Clear existing student entries in form before populating
         while len(form.students.entries) > 0:
             form.students.pop_entry()
 
-        # Fetch existing records for these students for this course and selected date
+        # Fetch existing records for these enrolled students for this course and selected date
         selected_date = form.date.data
-        existing_records_list = AttendanceRecord.query.filter(
-            AttendanceRecord.course_id == course.id,
-            AttendanceRecord.date == selected_date,
-            AttendanceRecord.user_id.in_([s.id for s in students_in_college])
-        ).all()
-        existing_records_map = {rec.user_id: rec.status for rec in existing_records_list}
+        if students_for_attendance: # Only query if there are students to check for
+            existing_records_list = AttendanceRecord.query.filter(
+                AttendanceRecord.course_id == course.id,
+                AttendanceRecord.date == selected_date,
+                AttendanceRecord.user_id.in_([s.id for s in students_for_attendance])
+            ).all()
+            existing_records_map = {rec.user_id: rec.status for rec in existing_records_list}
+        else:
+            existing_records_map = {}
 
-        for student in students_in_college:
+
+        for student in students_for_attendance:
             entry_form_data = { # Create a dictionary for FormField data
                 'student_id': student.id,
                 'username': student.username,
@@ -1075,3 +1109,188 @@ def view_user_attendance(username):
     
     return render_template('view_attendance_user.html', title=f'Attendance for {user_profile.username}',
                            form=form, user_profile=user_profile, records=attendance_records)
+
+# -------------------------- Course Enrollment Routes -----------------------
+
+@app.route('/course/<int:course_id>/enroll', methods=['POST'])
+@login_required
+def enroll_in_course(course_id):
+    course = Course.query.get_or_404(course_id)
+    
+    # Check if user is already enrolled
+    existing_enrollment = CourseEnrollment.query.filter_by(user_id=current_user.id, course_id=course.id).first()
+    
+    if existing_enrollment:
+        if existing_enrollment.status == 'enrolled':
+            flash('You are already enrolled in this course.', 'info')
+        elif existing_enrollment.status == 'dropped':
+            # Check capacity before re-enrolling a dropped student
+            enrolled_count = CourseEnrollment.query.filter_by(course_id=course.id, status='enrolled').count()
+            if course.capacity is not None and enrolled_count >= course.capacity:
+                flash(f'This course is currently full (capacity: {course.capacity}). You cannot re-enroll at this time.', 'warning')
+            else:
+                existing_enrollment.status = 'enrolled'
+                existing_enrollment.enrollment_date = datetime.utcnow()
+                db.session.commit()
+                flash('You have been re-enrolled in this course.', 'success')
+        else: # e.g., 'waitlisted', 'completed' - handle as per desired logic
+            flash(f'Your current enrollment status is "{existing_enrollment.status}". Re-enrollment from this status is not currently supported via this action.', 'warning')
+    else:
+        # New enrollment: Check capacity
+        enrolled_count = CourseEnrollment.query.filter_by(course_id=course.id, status='enrolled').count()
+        if course.capacity is not None and enrolled_count >= course.capacity:
+            # Basic full check - could implement waitlist logic here if desired
+            flash(f'This course is currently full (capacity: {course.capacity}). Enrollment is not possible at this time.', 'warning')
+        else:
+            new_enrollment = CourseEnrollment(user_id=current_user.id, course_id=course.id, status='enrolled')
+            db.session.add(new_enrollment)
+            db.session.commit()
+            flash('You have successfully enrolled in the course!', 'success')
+            
+    return redirect(url_for('view_course', course_id=course.id))
+
+# -------------------------- Enrollment Management Route --------------------
+
+@app.route('/course/<int:course_id>/manage_enrollments', methods=['GET', 'POST'])
+@login_required
+def manage_course_enrollments(course_id):
+    course = Course.query.get_or_404(course_id)
+
+    if current_user.role not in [User.ROLE_ADMIN, User.ROLE_MANAGEMENT]:
+        # Future: Add check for User.ROLE_FACULTY and if they are instructor for this course
+        flash('You do not have permission to manage enrollments for this course.', 'danger')
+        return redirect(url_for('view_course', course_id=course.id))
+
+    add_student_form = AddStudentEnrollmentForm()
+    # change_status_form is not directly submitted as a whole, but its fields might be used
+    # if we render one per student. For now, we'll handle actions based on request.form.
+    change_status_form = ChangeEnrollmentStatusForm() # Instantiate for CSRF token if needed per student row
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+
+        if add_student_form.submit_add_student.data and add_student_form.validate_on_submit():
+            username_or_email = add_student_form.student_username.data
+            status = add_student_form.status.data
+            
+            student_to_enroll = User.query.filter(
+                (User.username == username_or_email) | (User.email == username_or_email)
+            ).first()
+
+            if student_to_enroll:
+                enrollment = CourseEnrollment.query.filter_by(
+                    user_id=student_to_enroll.id, course_id=course.id
+                ).first()
+
+                if status == 'enrolled':
+                    enrolled_count = CourseEnrollment.query.filter_by(course_id=course.id, status='enrolled').count()
+                    # If updating an existing non-'enrolled' record to 'enrolled', or adding new as 'enrolled'
+                    is_newly_enrolling = (enrollment is None) or (enrollment and enrollment.status != 'enrolled')
+                    
+                    if course.capacity is not None and enrolled_count >= course.capacity and is_newly_enrolling:
+                        flash(f'Cannot enroll {student_to_enroll.username}. Course is full (capacity: {course.capacity}).', 'warning')
+                        return redirect(url_for('manage_course_enrollments', course_id=course.id))
+
+                if enrollment:
+                    enrollment.status = status
+                    enrollment.enrollment_date = datetime.utcnow() # Update date on any status change
+                    flash(f'{student_to_enroll.username}\'s enrollment status updated to {status}.', 'success')
+                else:
+                    new_enrollment = CourseEnrollment(
+                        user_id=student_to_enroll.id, 
+                        course_id=course.id, 
+                        status=status
+                    )
+                    db.session.add(new_enrollment)
+                    flash(f'{student_to_enroll.username} has been {status} in the course.', 'success')
+                db.session.commit()
+            else:
+                # This case should ideally be caught by form.validate_student_username
+                flash(f'Student with username/email "{username_or_email}" not found.', 'danger')
+            return redirect(url_for('manage_course_enrollments', course_id=course.id))
+
+        elif action == 'change_status':
+            student_id_to_change = request.form.get('student_id')
+            new_status = request.form.get('new_status') # This should come from the specific student's status select field
+
+            if not student_id_to_change or not new_status:
+                flash('Missing student ID or new status for change.', 'danger')
+                return redirect(url_for('manage_course_enrollments', course_id=course.id))
+
+            enrollment_to_update = CourseEnrollment.query.filter_by(
+                user_id=int(student_id_to_change), course_id=course.id
+            ).first_or_404()
+            
+            if new_status == 'enrolled' and enrollment_to_update.status != 'enrolled':
+                enrolled_count = CourseEnrollment.query.filter_by(course_id=course.id, status='enrolled').count()
+                if course.capacity is not None and enrolled_count >= course.capacity:
+                    flash(f'Cannot change status to "enrolled" for {enrollment_to_update.student.username}. Course is full.', 'warning')
+                    return redirect(url_for('manage_course_enrollments', course_id=course.id))
+            
+            enrollment_to_update.status = new_status
+            enrollment_to_update.enrollment_date = datetime.utcnow() # Update timestamp
+            db.session.commit()
+            flash(f'{enrollment_to_update.student.username}\'s status changed to {new_status}.', 'success')
+            return redirect(url_for('manage_course_enrollments', course_id=course.id))
+
+        elif action == 'remove_enrollment':
+            student_id_to_remove = request.form.get('student_id')
+            if not student_id_to_remove:
+                flash('Missing student ID for removal.', 'danger')
+                return redirect(url_for('manage_course_enrollments', course_id=course.id))
+
+            enrollment_to_remove = CourseEnrollment.query.filter_by(
+                user_id=int(student_id_to_remove), course_id=course.id
+            ).first_or_404()
+            
+            student_username = enrollment_to_remove.student.username # Get username before deleting
+            db.session.delete(enrollment_to_remove)
+            db.session.commit()
+            flash(f'{student_username}\'s enrollment record has been removed from the course.', 'success')
+            return redirect(url_for('manage_course_enrollments', course_id=course.id))
+        
+        else: # POST but not a recognized action, or add_student_form validation failed
+            if add_student_form.errors:
+                 # Errors will be displayed by the template next to the fields
+                flash('Error in adding student. Please check the form.', 'danger')
+            else:
+                flash('Invalid action or form submission.', 'danger')
+
+
+    # GET request or after a POST that didn't redirect (e.g. add_student_form validation error)
+    enrollments = db.session.query(CourseEnrollment, User.username, User.email).\
+        join(User, CourseEnrollment.user_id == User.id).\
+        filter(CourseEnrollment.course_id == course.id).\
+        order_by(User.username.asc()).all()
+    
+    # Map to a list of dicts or custom objects if needed by template, or pass query result directly
+    # For the template, we need to pass enrollment objects along with student info.
+    # The query above already joins User, so student info is accessible via enrollment.student
+    
+    # Re-fetch just enrollments if needed, or process the joined query result
+    enrollment_objects = [enrollment_obj for enrollment_obj, username, email in enrollments]
+
+
+    return render_template('manage_enrollments.html', 
+                           title=f'Manage Enrollments for {course.name}',
+                           course=course, 
+                           enrollments=enrollment_objects, # Pass the list of CourseEnrollment objects
+                           add_student_form=add_student_form,
+                           change_status_form=change_status_form) # Pass for CSRF if used per row
+
+@app.route('/course/<int:course_id>/unenroll', methods=['POST'])
+@login_required
+def unenroll_from_course(course_id):
+    course = Course.query.get_or_404(course_id)
+    
+    enrollment = CourseEnrollment.query.filter_by(user_id=current_user.id, course_id=course.id, status='enrolled').first()
+    
+    if enrollment:
+        enrollment.status = 'dropped' # Soft delete
+        # enrollment.enrollment_date = datetime.utcnow() # Optionally update timestamp on status change
+        db.session.commit()
+        flash('You have successfully unenrolled from the course.', 'success')
+    else:
+        flash('You are not currently enrolled in this course, or your enrollment is not active.', 'info')
+        
+    return redirect(url_for('view_course', course_id=course.id))
