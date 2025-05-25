@@ -4,15 +4,16 @@ from app.forms import (
     LoginForm, RegistrationForm, PostForm, CommentForm,
     CourseForm, StudyGroupForm, EventForm, get_college_courses,
     CollegeForm, ReportForm, ReportStatusUpdateForm, AdminEditUserForm,
-    SearchForm, EditProfileForm, ReelForm, ReelCommentForm # Added Reel forms
+    SearchForm, EditProfileForm, ReelForm, ReelCommentForm, # Added Reel forms
+    TakeAttendanceForm, StudentAttendanceEntryForm, ViewAttendanceForm # Added Attendance forms
 )
 from app.models import (User, College, Post, Comment, Vote, VoteType, 
                         Course, StudyGroup, Event, Report, ReportStatus, Notification, # Added Notification
-                        Reel, ReelComment, ReelLike) # Added Reel models
+                        Reel, ReelComment, ReelLike, AttendanceRecord) # Added Reel and Attendance models
 from app.utils import get_target_score, send_notification # Added send_notification
 from flask_login import login_user, logout_user, current_user, login_required
 from sqlalchemy import or_
-from datetime import datetime
+from datetime import datetime, date # Added date
 
 
 @app.route('/')
@@ -875,3 +876,202 @@ def like_reel(reel_id):
     
     db.session.commit()
     return redirect(url_for('view_reel', reel_id=reel.id))
+
+# -------------------------- Attendance Routes ------------------------------
+
+@app.route('/course/<int:course_id>/take_attendance', methods=['GET', 'POST'])
+@login_required
+def take_attendance(course_id):
+    course = Course.query.get_or_404(course_id)
+    # Role Check: Allow Admin or Faculty
+    if current_user.role not in [User.ROLE_ADMIN, User.ROLE_FACULTY]:
+        flash('You do not have permission to take attendance for this course.', 'danger')
+        return redirect(url_for('view_course', course_id=course.id))
+
+    form = TakeAttendanceForm(request.form) # Pass request.form for POST data
+    form.course_id.query = Course.query.filter_by(id=course_id) # Set query for the specific course
+
+    if request.method == 'GET':
+        form.course_id.data = course # Pre-select current course
+        form.date.data = date.today() # Default to today
+        
+        # Simplified: Get students from the course's college. Needs proper enrollment system.
+        students_in_college = User.query.filter_by(college_id=course.college_id, role=User.ROLE_STUDENT).order_by(User.username).all()
+        
+        # Clear existing student entries in form before populating
+        while len(form.students.entries) > 0:
+            form.students.pop_entry()
+
+        # Fetch existing records for these students for this course and selected date
+        selected_date = form.date.data
+        existing_records_list = AttendanceRecord.query.filter(
+            AttendanceRecord.course_id == course.id,
+            AttendanceRecord.date == selected_date,
+            AttendanceRecord.user_id.in_([s.id for s in students_in_college])
+        ).all()
+        existing_records_map = {rec.user_id: rec.status for rec in existing_records_list}
+
+        for student in students_in_college:
+            entry_form_data = { # Create a dictionary for FormField data
+                'student_id': student.id,
+                'username': student.username,
+                'status': existing_records_map.get(student.id, 'present') # Default to 'present'
+            }
+            form.students.append_entry(data=entry_form_data)
+            
+    elif form.validate_on_submit(): # POST request
+        attendance_date = form.date.data
+        for student_form_field in form.students:
+            student_id = int(student_form_field.student_id.data) # Ensure student_id is int
+            status = student_form_field.status.data
+            
+            record = AttendanceRecord.query.filter_by(
+                user_id=student_id, 
+                course_id=course.id, 
+                date=attendance_date
+            ).first()
+            
+            if record:
+                record.status = status
+                record.marked_by_id = current_user.id
+                record.timestamp = datetime.utcnow()
+            else:
+                record = AttendanceRecord(
+                    user_id=student_id, 
+                    course_id=course.id, 
+                    date=attendance_date, 
+                    status=status, 
+                    marked_by_id=current_user.id
+                )
+                db.session.add(record)
+        
+        db.session.commit()
+        flash('Attendance records have been saved/updated.', 'success')
+        # Redirect to the same page, which will then repopulate with the saved data for that date
+        return redirect(url_for('take_attendance', course_id=course.id, date=attendance_date.isoformat()))
+
+    # If GET or POST validation failed, render the template
+    # For GET, students are populated above. For POST error, WTForms handles field values.
+    # If POST fails and we re-render, we might need to re-populate the dynamic student list if it's not preserved by FieldList.
+    # The above GET logic for populating students will run again if validation fails on POST,
+    # which is acceptable as it will reflect the submitted (but not validated) date.
+    return render_template('take_attendance.html', title=f'Take Attendance for {course.name}', form=form, course=course)
+
+
+@app.route('/course/<int:course_id>/view_attendance', methods=['GET', 'POST'])
+@login_required
+def view_course_attendance(course_id):
+    course = Course.query.get_or_404(course_id)
+    # Permission: Allow Admin or Faculty to view course attendance
+    # (and potentially student to view their own, handled by view_user_attendance)
+    # A more specific check for "instructor of this course" could be added later.
+    if current_user.role not in [User.ROLE_ADMIN, User.ROLE_FACULTY]:
+        # If student, they should use their own attendance view.
+        # If other role, they don't have permission.
+        is_student_in_course = False # Placeholder for logic to check if user is student in this course
+        if current_user.role == User.ROLE_STUDENT:
+            # Here you might check if current_user is enrolled in this course.
+            # For now, we'll assume students can't use this specific view directly.
+            pass # Keep this check simple for now.
+        
+        # If not Admin or Faculty, and not a student viewing their own (which this route isn't designed for)
+        if current_user.role not in [User.ROLE_ADMIN, User.ROLE_FACULTY]: # Re-check after potential student logic
+             flash('You do not have permission to view attendance for this course.', 'danger')
+             return redirect(url_for('view_course', course_id=course.id))
+
+    form = ViewAttendanceForm(request.form)
+    # Populate choices for the form's QuerySelectFields if they depend on context (e.g., students in this course)
+    # form.user_id.query = User.query.filter(User.attendance_records.any(course_id=course.id)).order_by(User.username) # More complex
+    # For now, the default query_factory in the form definition (all users) is used.
+
+    query = AttendanceRecord.query.filter_by(course_id=course.id)
+
+    if form.validate_on_submit(): # This handles POST for form submission
+        if form.user_id.data:
+            query = query.filter(AttendanceRecord.user_id == form.user_id.data.id)
+        if form.start_date.data:
+            query = query.filter(AttendanceRecord.date >= form.start_date.data)
+        if form.end_date.data:
+            query = query.filter(AttendanceRecord.date <= form.end_date.data)
+    elif request.method == 'GET': # Handle GET request with query parameters for filtering
+        if request.args.get('user_id'):
+             query = query.filter(AttendanceRecord.user_id == request.args.get('user_id'))
+        if request.args.get('start_date'):
+            try:
+                start_dt = datetime.strptime(request.args.get('start_date'), '%Y-%m-%d').date()
+                query = query.filter(AttendanceRecord.date >= start_dt)
+                form.start_date.data = start_dt # Pre-fill form
+            except ValueError:
+                flash('Invalid start date format. Please use YYYY-MM-DD.', 'warning')
+        if request.args.get('end_date'):
+            try:
+                end_dt = datetime.strptime(request.args.get('end_date'), '%Y-%m-%d').date()
+                query = query.filter(AttendanceRecord.date <= end_dt)
+                form.end_date.data = end_dt # Pre-fill form
+            except ValueError:
+                flash('Invalid end date format. Please use YYYY-MM-DD.', 'warning')
+        # Pre-fill other form fields from GET args if needed
+        if request.args.get('user_id'):
+            user_filter_id = request.args.get('user_id', type=int)
+            user_for_filter = User.query.get(user_filter_id)
+            if user_for_filter:
+                form.user_id.data = user_for_filter
+
+
+    attendance_records = query.order_by(AttendanceRecord.date.desc(), AttendanceRecord.student.has(User.username)).all()
+    
+    return render_template('view_attendance_course.html', title=f'Attendance for {course.name}', 
+                           form=form, course=course, records=attendance_records)
+
+
+@app.route('/user/<username>/attendance', methods=['GET', 'POST'])
+@login_required
+def view_user_attendance(username):
+    user_profile = User.query.filter_by(username=username).first_or_404()
+
+    if current_user != user_profile and current_user.role != User.ROLE_ADMIN:
+        flash('You do not have permission to view this attendance report.', 'danger')
+        return redirect(url_for('index'))
+
+    form = ViewAttendanceForm(request.form)
+    # Populate form.course_id.query dynamically if it should only show courses the user is in
+    # form.course_id.query = Course.query.join(AttendanceRecord).filter(AttendanceRecord.user_id == user_profile.id).distinct().order_by(Course.name)
+    # For now, the default query_factory (all courses) is used.
+
+    query = AttendanceRecord.query.filter_by(user_id=user_profile.id)
+
+    if form.validate_on_submit(): # This handles POST for form submission
+        if form.course_id.data:
+            query = query.filter(AttendanceRecord.course_id == form.course_id.data.id)
+        if form.start_date.data:
+            query = query.filter(AttendanceRecord.date >= form.start_date.data)
+        if form.end_date.data:
+            query = query.filter(AttendanceRecord.date <= form.end_date.data)
+    elif request.method == 'GET': # Handle GET request with query parameters
+        if request.args.get('course_id'):
+            query = query.filter(AttendanceRecord.course_id == request.args.get('course_id'))
+        if request.args.get('start_date'):
+            try:
+                start_dt_user = datetime.strptime(request.args.get('start_date'), '%Y-%m-%d').date()
+                query = query.filter(AttendanceRecord.date >= start_dt_user)
+                form.start_date.data = start_dt_user
+            except ValueError:
+                flash('Invalid start date format. Please use YYYY-MM-DD.', 'warning')
+        if request.args.get('end_date'):
+            try:
+                end_dt_user = datetime.strptime(request.args.get('end_date'), '%Y-%m-%d').date()
+                query = query.filter(AttendanceRecord.date <= end_dt_user)
+                form.end_date.data = end_dt_user
+            except ValueError:
+                flash('Invalid end date format. Please use YYYY-MM-DD.', 'warning')
+        if request.args.get('course_id'):
+            course_filter_id = request.args.get('course_id', type=int)
+            course_for_filter = Course.query.get(course_filter_id)
+            if course_for_filter:
+                form.course_id.data = course_for_filter
+
+
+    attendance_records = query.order_by(AttendanceRecord.course.has(Course.name), AttendanceRecord.date.desc()).all()
+    
+    return render_template('view_attendance_user.html', title=f'Attendance for {user_profile.username}',
+                           form=form, user_profile=user_profile, records=attendance_records)

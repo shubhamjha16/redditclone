@@ -1,6 +1,7 @@
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField, SelectField
-from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, Length, URL # Added URL validator
+from wtforms.fields import DateTimeField, HiddenField, DateField, FieldList, FormField # Added HiddenField, DateField, FieldList, FormField
+from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, Length, URL, Optional # Added URL validator and Optional
 from app.models import User, College # Make sure College model is imported
 
 class RegistrationForm(FlaskForm):
@@ -22,7 +23,11 @@ class RegistrationForm(FlaskForm):
         ('Other', 'Other'),
     ]
     year_of_college = SelectField('Year of College (Optional)', choices=year_of_college_choices, validators=[])
-    role = SelectField('Role', choices=[(User.ROLE_STUDENT, 'Student'), (User.ROLE_ALUMNI, 'Alumni')], validators=[DataRequired()])
+    role = SelectField('Role', choices=[
+        (User.ROLE_STUDENT, 'Student'), 
+        (User.ROLE_ALUMNI, 'Alumni'), 
+        (User.ROLE_FACULTY, 'Faculty')
+    ], validators=[DataRequired()])
     profile_picture_url = StringField('Profile Picture URL (Optional)', validators=[Length(max=255)])
     bio = StringField('Bio (Optional)', widget=TextArea(), validators=[Length(max=500)])
     submit = SubmitField('Register')
@@ -66,7 +71,7 @@ class PostForm(FlaskForm):
 
 # Need to import TextArea first
 from wtforms.widgets import TextArea # This import is already here, ensure it stays
-from wtforms.fields import DateTimeField # For EventForm
+# DateTimeField, HiddenField, DateField, FieldList, FormField are now imported from wtforms.fields at the top
 from wtforms_sqlalchemy.fields import QuerySelectField # For StudyGroupForm course selection
 from app.models import Course, ReportStatus # To populate QuerySelectField and for ReportStatusUpdateForm
 
@@ -127,6 +132,7 @@ class AdminEditUserForm(FlaskForm):
     role = SelectField('Role', choices=[
         (User.ROLE_STUDENT, 'Student'),
         (User.ROLE_ALUMNI, 'Alumni'),
+        (User.ROLE_FACULTY, 'Faculty'),
         (User.ROLE_ADMIN, 'Admin')
     ], validators=[DataRequired()])
     is_college_verified = BooleanField('College Affiliation Verified')
@@ -151,3 +157,43 @@ class ReelForm(FlaskForm):
 class ReelCommentForm(FlaskForm):
     content = StringField('Add a comment', widget=TextArea(), validators=[DataRequired(), Length(min=1, max=500)])
     submit = SubmitField('Comment')
+
+# --- Attendance Forms ---
+
+class StudentAttendanceEntryForm(FlaskForm):
+    student_id = HiddenField(validators=[DataRequired()])
+    username = StringField('Student', render_kw={'readonly': True}) # For display
+    status = SelectField('Status', choices=[
+        ('present', 'Present'),
+        ('absent', 'Absent'),
+        ('late', 'Late'),
+        ('excused', 'Excused')
+    ], validators=[DataRequired()])
+
+class TakeAttendanceForm(FlaskForm):
+    course_id = QuerySelectField('Select Course',
+                                 query_factory=lambda: [], # Will be populated in the route
+                                 get_label='name',
+                                 allow_blank=False,
+                                 validators=[DataRequired()])
+    date = DateField('Attendance Date', format='%Y-%m-%d', validators=[DataRequired()])
+    students = FieldList(FormField(StudentAttendanceEntryForm), min_entries=0)
+    submit = SubmitField('Submit Attendance')
+
+class ViewAttendanceForm(FlaskForm):
+    course_id = QuerySelectField('Filter by Course (Optional)',
+                                 query_factory=lambda: Course.query.order_by(Course.name).all(),
+                                 get_label='name',
+                                 allow_blank=True,
+                                 blank_text='-- All Courses --',
+                                 validators=[Optional()])
+    # For user_id, consider filtering by role (e.g., only students) in the route or a more specific query_factory
+    user_id = QuerySelectField('Filter by Student (Optional)',
+                               query_factory=lambda: User.query.order_by(User.username).all(), 
+                               get_label='username',
+                               allow_blank=True,
+                               blank_text='-- All Students --',
+                               validators=[Optional()])
+    start_date = DateField('Start Date (Optional)', format='%Y-%m-%d', validators=[Optional()])
+    end_date = DateField('End Date (Optional)', format='%Y-%m-%d', validators=[Optional()])
+    submit = SubmitField('View Attendance')

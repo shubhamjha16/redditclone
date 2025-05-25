@@ -1,7 +1,7 @@
 import pytest
-from app.models import User, College, Post, Comment, Vote, VoteType, Report, ReportStatus, Course, StudyGroup, Event, Notification, Reel, ReelComment, ReelLike
+from app.models import User, College, Post, Comment, Vote, VoteType, Report, ReportStatus, Course, StudyGroup, Event, Notification, Reel, ReelComment, ReelLike, AttendanceRecord
 from app import db # For database operations
-from datetime import datetime
+from datetime import datetime, date # Added date
 from sqlalchemy.exc import IntegrityError
 
 def test_user_model_creation(new_user): # Uses the new_user fixture from conftest.py
@@ -387,3 +387,142 @@ def test_reel_cascade_delete(init_database, new_user, new_college):
         assert Reel.query.get(reel_id) is None
         assert ReelComment.query.get(comment_id) is None
         assert ReelLike.query.get(like_id) is None
+
+# --- Tests for AttendanceRecord Model ---
+
+def test_attendance_record_creation(init_database, new_college):
+    """Test the creation of an AttendanceRecord model instance."""
+    with init_database.app.app_context():
+        student1 = User(username='student1_att', email='s1_att@example.com', role=User.ROLE_STUDENT)
+        student1.set_password('password')
+        faculty_marker = User(username='faculty_att', email='f1_att@example.com', role=User.ROLE_FACULTY)
+        faculty_marker.set_password('password')
+        
+        course1 = Course(name="Attendance Course", course_code="ATT101", college_id=new_college.id, instructor="Prof. Test")
+        
+        db.session.add_all([student1, faculty_marker, course1])
+        db.session.commit()
+
+        attendance_date = date(2023, 10, 26)
+        record = AttendanceRecord(
+            user_id=student1.id,
+            course_id=course1.id,
+            date=attendance_date,
+            status='present',
+            marked_by_id=faculty_marker.id
+        )
+        db.session.add(record)
+        db.session.commit()
+
+        retrieved_record = AttendanceRecord.query.get(record.id)
+        assert retrieved_record is not None
+        assert retrieved_record.user_id == student1.id
+        assert retrieved_record.course_id == course1.id
+        assert retrieved_record.date == attendance_date
+        assert retrieved_record.status == 'present'
+        assert retrieved_record.marked_by_id == faculty_marker.id
+        assert isinstance(retrieved_record.timestamp, datetime)
+        
+        # Test relationships
+        assert retrieved_record.student == student1
+        assert retrieved_record.course == course1
+        assert retrieved_record.marker == faculty_marker
+
+def test_attendance_record_unique_constraint(init_database, new_college):
+    """Test the unique constraint (user_id, course_id, date) for AttendanceRecord."""
+    with init_database.app.app_context():
+        student1 = User(username='student_uc', email='s_uc@example.com', role=User.ROLE_STUDENT)
+        student1.set_password('password')
+        faculty_marker = User(username='faculty_uc', email='f_uc@example.com', role=User.ROLE_FACULTY)
+        faculty_marker.set_password('password')
+        course1 = Course(name="Unique Course", course_code="UC101", college_id=new_college.id)
+        course2 = Course(name="Another Course", course_code="AC101", college_id=new_college.id) # For testing variation
+        student2 = User(username='student2_uc', email='s2_uc@example.com', role=User.ROLE_STUDENT)
+        student2.set_password('password')
+
+        db.session.add_all([student1, student2, faculty_marker, course1, course2])
+        db.session.commit()
+
+        attendance_date = date(2023, 10, 27)
+        
+        # Initial record
+        record1 = AttendanceRecord(
+            user_id=student1.id, course_id=course1.id, date=attendance_date, 
+            status='present', marked_by_id=faculty_marker.id
+        )
+        db.session.add(record1)
+        db.session.commit()
+        assert record1.id is not None
+
+        # Attempt to create duplicate record (same user, course, date)
+        duplicate_record = AttendanceRecord(
+            user_id=student1.id, course_id=course1.id, date=attendance_date, 
+            status='absent', marked_by_id=faculty_marker.id # Different status, but still duplicate by constraint
+        )
+        db.session.add(duplicate_record)
+        with pytest.raises(IntegrityError):
+            db.session.commit()
+        db.session.rollback()
+
+        # Verify different date works
+        record_diff_date = AttendanceRecord(
+            user_id=student1.id, course_id=course1.id, date=date(2023, 10, 28),
+            status='present', marked_by_id=faculty_marker.id
+        )
+        db.session.add(record_diff_date)
+        db.session.commit()
+        assert record_diff_date.id is not None
+
+        # Verify different student works
+        record_diff_student = AttendanceRecord(
+            user_id=student2.id, course_id=course1.id, date=attendance_date,
+            status='present', marked_by_id=faculty_marker.id
+        )
+        db.session.add(record_diff_student)
+        db.session.commit()
+        assert record_diff_student.id is not None
+
+        # Verify different course works
+        record_diff_course = AttendanceRecord(
+            user_id=student1.id, course_id=course2.id, date=attendance_date,
+            status='present', marked_by_id=faculty_marker.id
+        )
+        db.session.add(record_diff_course)
+        db.session.commit()
+        assert record_diff_course.id is not None
+
+def test_attendance_record_backrefs(init_database, new_college):
+    """Test the backref relationships for AttendanceRecord."""
+    with init_database.app.app_context():
+        student1 = User(username='student_br', email='s_br@example.com', role=User.ROLE_STUDENT)
+        student1.set_password('password')
+        faculty_marker = User(username='faculty_br', email='f_br@example.com', role=User.ROLE_FACULTY)
+        faculty_marker.set_password('password')
+        course1 = Course(name="Backref Course", course_code="BR101", college_id=new_college.id)
+        
+        db.session.add_all([student1, faculty_marker, course1])
+        db.session.commit()
+
+        attendance_date = date(2023, 10, 29)
+        record = AttendanceRecord(
+            user_id=student1.id,
+            course_id=course1.id,
+            date=attendance_date,
+            status='late',
+            marked_by_id=faculty_marker.id
+        )
+        db.session.add(record)
+        db.session.commit()
+
+        # Refresh objects to ensure backrefs are loaded
+        db.session.refresh(student1)
+        db.session.refresh(course1)
+        db.session.refresh(faculty_marker)
+
+        assert record in student1.attendance_records.all()
+        assert record in course1.attendance_records.all()
+        assert record in faculty_marker.marked_attendance_records.all()
+        
+        assert len(student1.attendance_records.all()) == 1
+        assert len(course1.attendance_records.all()) == 1
+        assert len(faculty_marker.marked_attendance_records.all()) == 1

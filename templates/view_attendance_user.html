@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% import "bootstrap_wtf.html" as wtf %}
+
+{% block app_content %}
+<div class="container mt-4">
+    <h2>Attendance Report for: {{ user_profile.username }}</h2>
+    {% if user_profile.college %}
+        <p>College: <a href="{{ url_for('college_posts', college_id=user_profile.college.id) }}">{{ user_profile.college.name }}</a></p>
+    {% endif %}
+    <hr>
+
+    {# Filter Form #}
+    <form method="GET" action="{{ url_for('view_user_attendance', username=user_profile.username) }}" class="mb-4 p-3 border rounded bg-light">
+        {# Not rendering form.user_id as it's fixed by the route #}
+        <div class="form-row align-items-end">
+            <div class="col-md-4">
+                {{ wtf.form_field(form.course_id, label_visible=True, form_type="horizontal", horizontal_columns=('md', 3, 9)) }}
+            </div>
+            <div class="col-md-3">
+                {{ wtf.form_field(form.start_date, label_visible=True, form_type="horizontal", horizontal_columns=('md', 4, 8)) }}
+            </div>
+            <div class="col-md-3">
+                {{ wtf.form_field(form.end_date, label_visible=True, form_type="horizontal", horizontal_columns=('md', 4, 8)) }}
+            </div>
+            <div class="col-md-2">
+                {{ wtf.form_field(form.submit, button_map={'submit': 'primary'}) }}
+            </div>
+        </div>
+         {% for error in form.course_id.errors %} <span class="text-danger d-block">{{ error }}</span> {% endfor %}
+         {% for error in form.start_date.errors %} <span class="text-danger d-block">{{ error }}</span> {% endfor %}
+         {% for error in form.end_date.errors %} <span class="text-danger d-block">{{ error }}</span> {% endfor %}
+    </form>
+
+    {% if records %}
+        <table class="table table-striped table-hover table-sm">
+            <thead class="thead-light">
+                <tr>
+                    <th>Date</th>
+                    <th>Course</th>
+                    <th>Status</th>
+                    <th>Marked By</th>
+                    <th>Time Marked</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in records %}
+                    <tr>
+                        <td>{{ record.date.strftime('%Y-%m-%d') }}</td>
+                        <td>
+                            {% if record.course %}
+                                <a href="{{ url_for('view_course', course_id=record.course.id) }}">{{ record.course.name }}</a>
+                                <br><small class="text-muted">{{ record.course.course_code }}</small>
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge 
+                                {% if record.status == 'present' %}badge-success
+                                {% elif record.status == 'absent' %}badge-danger
+                                {% elif record.status == 'late' %}badge-warning
+                                {% elif record.status == 'excused' %}badge-info
+                                {% else %}badge-secondary
+                                {% endif %}">
+                                {{ record.status|capitalize }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if record.marker %}
+                                <a href="{{ url_for('user_profile', username=record.marker.username) }}">{{ record.marker.username }}</a>
+                            {% else %}
+                                System/Unknown
+                            {% endif %}
+                        </td>
+                        <td>{{ record.timestamp.strftime('%Y-%m-%d %H:%M') }} UTC</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="alert alert-info mt-3">
+            No attendance records found for this user matching your criteria.
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -21,6 +21,11 @@
     *   College management (create, edit).
     *   User management (verify affiliation, change roles).
     *   Content moderation (reporting system, review reported content).
+*   **Attendance Management System:**
+    *   Faculty/Admins can take attendance for courses, marking students as present, absent, late, or excused.
+    *   Students can view their own attendance records.
+    *   Admins/Faculty can view attendance reports for courses, with filtering options.
+    *   Introduction of a 'Faculty' user role with specific permissions for taking attendance.
 *   Search functionality (posts, courses, colleges).
 *   User notification system (e.g., for new comments on posts).
 *   **Reels Section (Instagram-like):**

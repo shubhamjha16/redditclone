@@ -1,9 +1,8 @@
 import pytest
-from app.models import User, College, Post, Comment, Reel, ReelComment, ReelLike # Added Reel models
+from app.models import User, College, Post, Comment, Reel, ReelComment, ReelLike, Course, AttendanceRecord # Added Course, AttendanceRecord
 from app import db
 from flask import url_for # For generating URLs in tests
-
-def test_index_page_logged_out(client):
+from datetime import date, timedelta # Added date and timedelta
     response = client.get('/', follow_redirects=True)
     assert response.status_code == 200
     assert b"Sign In" in response.data # Should be redirected to login
@@ -450,3 +449,196 @@ def test_reels_feed_route(test_auth_client, client, init_database, new_user, new
     unauth_response_feed = client.get(url_for('reels_feed'), follow_redirects=False)
     assert unauth_response_feed.status_code == 302
     assert '/login' in unauth_response_feed.location
+
+# --- Tests for Attendance Routes ---
+
+def test_take_attendance_route(test_auth_client, init_database, new_college, new_course):
+    """Test the /course/<course_id>/take_attendance route."""
+    course = new_course # Assumes new_course is linked to new_college or is general
+
+    with init_database.app.app_context():
+        faculty_user = User(username='faculty_att_route', email='faculty_attr@example.com', role=User.ROLE_FACULTY, college_id=new_college.id)
+        faculty_user.set_password('password')
+        student_user = User(username='student_att_route', email='student_attr@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        student_user.set_password('password')
+        admin_user = User(username='admin_att_route', email='admin_attr@example.com', role=User.ROLE_ADMIN, college_id=new_college.id)
+        admin_user.set_password('password')
+        db.session.add_all([faculty_user, student_user, admin_user, course])
+        db.session.commit()
+    
+    # --- GET request (as faculty) ---
+    client = test_auth_client(faculty_user)
+    response_get_faculty = client.get(url_for('take_attendance', course_id=course.id))
+    assert response_get_faculty.status_code == 200
+    assert b"Take Attendance for" in response_get_faculty.data
+    assert course.name.encode() in response_get_faculty.data
+    assert student_user.username.encode() in response_get_faculty.data # Student should be in the list
+    assert b"students-0-student_id" in response_get_faculty.data # Check for form field structure
+
+    # --- GET request (as admin) ---
+    client = test_auth_client(admin_user)
+    response_get_admin = client.get(url_for('take_attendance', course_id=course.id))
+    assert response_get_admin.status_code == 200
+    assert student_user.username.encode() in response_get_admin.data
+
+    # --- GET request (as student - forbidden) ---
+    client = test_auth_client(student_user)
+    response_get_student = client.get(url_for('take_attendance', course_id=course.id), follow_redirects=True)
+    assert response_get_student.status_code == 200 # Follows redirect
+    assert b"You do not have permission to take attendance for this course." in response_get_student.data
+    assert b"Take Attendance for" not in response_get_student.data # Should not see the form
+
+    # --- POST request (successful submission by faculty) ---
+    client = test_auth_client(faculty_user)
+    attendance_date_str = date(2023, 10, 27).isoformat()
+    post_data = {
+        'date': attendance_date_str,
+        'students-0-student_id': student_user.id,
+        'students-0-status': 'present',
+        'csrf_token': response_get_faculty.data.split(b'name="csrf_token" type="hidden" value="')[1].split(b'"')[0].decode() # Extract CSRF if needed by test_auth_client setup
+    }
+    response_post_faculty = client.post(url_for('take_attendance', course_id=course.id), data=post_data, follow_redirects=True)
+    assert response_post_faculty.status_code == 200
+    assert b"Attendance records have been saved/updated." in response_post_faculty.data
+    
+    with init_database.app.app_context():
+        record = AttendanceRecord.query.filter_by(user_id=student_user.id, course_id=course.id, date=date(2023,10,27)).first()
+        assert record is not None
+        assert record.status == 'present'
+        assert record.marked_by_id == faculty_user.id
+        original_timestamp = record.timestamp
+
+    # --- POST request (update existing record by admin) ---
+    client = test_auth_client(admin_user)
+    # Need to get a new CSRF token if the form is stateful or client is fresh
+    temp_get_response = client.get(url_for('take_attendance', course_id=course.id, date=attendance_date_str))
+    csrf_token_update = temp_get_response.data.split(b'name="csrf_token" type="hidden" value="')[1].split(b'"')[0].decode()
+    
+    post_data_update = {
+        'date': attendance_date_str,
+        'students-0-student_id': student_user.id,
+        'students-0-status': 'absent',
+        'csrf_token': csrf_token_update
+    }
+    response_post_update = client.post(url_for('take_attendance', course_id=course.id), data=post_data_update, follow_redirects=True)
+    assert response_post_update.status_code == 200
+    assert b"Attendance records have been saved/updated." in response_post_update.data
+
+    with init_database.app.app_context():
+        updated_record = AttendanceRecord.query.filter_by(user_id=student_user.id, course_id=course.id, date=date(2023,10,27)).first()
+        assert updated_record is not None
+        assert updated_record.status == 'absent'
+        assert updated_record.marked_by_id == admin_user.id
+        assert updated_record.timestamp > original_timestamp
+
+def test_view_course_attendance_route(test_auth_client, init_database, new_college, new_course):
+    """Test the /course/<course_id>/view_attendance route."""
+    course = new_course
+
+    with init_database.app.app_context():
+        faculty_user = User(username='faculty_v_att', email='faculty_vattr@example.com', role=User.ROLE_FACULTY, college_id=new_college.id)
+        faculty_user.set_password('password')
+        student_user = User(username='student_v_att', email='student_vattr@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        student_user.set_password('password')
+        db.session.add_all([faculty_user, student_user, course])
+        db.session.commit()
+
+        # Create an attendance record
+        record_date = date(2023, 10, 28)
+        record = AttendanceRecord(user_id=student_user.id, course_id=course.id, date=record_date, status='late', marked_by_id=faculty_user.id)
+        db.session.add(record)
+        db.session.commit()
+
+    # --- GET request (as faculty) ---
+    client = test_auth_client(faculty_user)
+    response_get_faculty = client.get(url_for('view_course_attendance', course_id=course.id))
+    assert response_get_faculty.status_code == 200
+    assert b"Attendance Records for" in response_get_faculty.data
+    assert course.name.encode() in response_get_faculty.data
+    assert student_user.username.encode() in response_get_faculty.data
+    assert record_date.strftime('%Y-%m-%d').encode() in response_get_faculty.data
+    assert b"Late" in response_get_faculty.data # Status, capitalized
+
+    # --- Test with date filter (GET params) ---
+    response_filtered = client.get(url_for('view_course_attendance', course_id=course.id, 
+                                           start_date=record_date.isoformat(), 
+                                           end_date=record_date.isoformat()))
+    assert response_filtered.status_code == 200
+    assert student_user.username.encode() in response_filtered.data # Record should be present
+
+    response_filtered_no_match = client.get(url_for('view_course_attendance', course_id=course.id, 
+                                                    start_date=(record_date + timedelta(days=1)).isoformat()))
+    assert response_filtered_no_match.status_code == 200
+    assert student_user.username.encode() not in response_filtered_no_match.data # Record should NOT be present
+
+    # --- GET request (as student - forbidden based on current route logic) ---
+    client = test_auth_client(student_user)
+    response_get_student = client.get(url_for('view_course_attendance', course_id=course.id), follow_redirects=True)
+    assert response_get_student.status_code == 200 # Follows redirect
+    assert b"You do not have permission to view attendance for this course." in response_get_student.data
+
+def test_view_user_attendance_route(test_auth_client, client, init_database, new_college, new_course):
+    """Test the /user/<username>/attendance route."""
+    course1 = new_course
+    
+    with init_database.app.app_context():
+        course2 = Course(name="Adv Attendance", course_code="ATT202", college_id=new_college.id)
+        s1 = User(username='student_s1_att', email='s1att@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        s1.set_password('password')
+        s2 = User(username='student_s2_att', email='s2att@example.com', role=User.ROLE_STUDENT, college_id=new_college.id)
+        s2.set_password('password')
+        admin = User(username='admin_view_att', email='adminvatt@example.com', role=User.ROLE_ADMIN, college_id=new_college.id)
+        admin.set_password('password')
+        faculty = User(username='faculty_view_att', email='facultyvatt@example.com', role=User.ROLE_FACULTY, college_id=new_college.id)
+        faculty.set_password('password')
+
+        db.session.add_all([course1, course2, s1, s2, admin, faculty])
+        db.session.commit()
+
+        date1 = date(2023, 11, 1)
+        date2 = date(2023, 11, 2)
+        record1_s1_c1 = AttendanceRecord(user_id=s1.id, course_id=course1.id, date=date1, status='present', marked_by_id=faculty.id)
+        record2_s1_c2 = AttendanceRecord(user_id=s1.id, course_id=course2.id, date=date2, status='absent', marked_by_id=faculty.id)
+        db.session.add_all([record1_s1_c1, record2_s1_c2])
+        db.session.commit()
+
+    # --- GET request (own records by s1) ---
+    client_s1 = test_auth_client(s1)
+    response_s1_own = client_s1.get(url_for('view_user_attendance', username=s1.username))
+    assert response_s1_own.status_code == 200
+    assert b"Attendance Report for: student_s1_att" in response_s1_own.data
+    assert course1.name.encode() in response_s1_own.data
+    assert course2.name.encode() in response_s1_own.data
+    assert b"Present" in response_s1_own.data
+    assert b"Absent" in response_s1_own.data
+
+    # --- GET request (viewing s1's records as admin) ---
+    client_admin = test_auth_client(admin)
+    response_admin_view_s1 = client_admin.get(url_for('view_user_attendance', username=s1.username))
+    assert response_admin_view_s1.status_code == 200
+    assert course1.name.encode() in response_admin_view_s1.data
+    assert b"Present" in response_admin_view_s1.data
+
+    # --- GET request (viewing s1's records as s2 - forbidden) ---
+    client_s2 = test_auth_client(s2)
+    response_s2_view_s1 = client_s2.get(url_for('view_user_attendance', username=s1.username), follow_redirects=True)
+    assert response_s2_view_s1.status_code == 200 # Follows redirect
+    assert b"You do not have permission to view this attendance report." in response_s2_view_s1.data
+
+    # --- Test Filters (as s1 viewing own records) ---
+    # Filter by course1
+    response_s1_filter_course = client_s1.get(url_for('view_user_attendance', username=s1.username, course_id=course1.id))
+    assert response_s1_filter_course.status_code == 200
+    assert course1.name.encode() in response_s1_filter_course.data
+    assert course2.name.encode() not in response_s1_filter_course.data # Should only show course1
+    assert b"Present" in response_s1_filter_course.data
+    assert b"Absent" not in response_s1_filter_course.data
+
+    # Filter by date range (covering only date1)
+    response_s1_filter_date = client_s1.get(url_for('view_user_attendance', username=s1.username, 
+                                                    start_date=date1.isoformat(), end_date=date1.isoformat()))
+    assert response_s1_filter_date.status_code == 200
+    assert course1.name.encode() in response_s1_filter_date.data # record1_s1_c1
+    assert b"Present" in response_s1_filter_date.data
+    assert course2.name.encode() not in response_s1_filter_date.data # record2_s1_c2 should be filtered out
+    assert b"Absent" not in response_s1_filter_date.data

@@ -22,6 +22,7 @@ class User(UserMixin, db.Model):
     # Define roles
     ROLE_STUDENT = 'student'
     ROLE_ALUMNI = 'alumni'
+    ROLE_FACULTY = 'faculty' # New role for faculty members
     ROLE_ADMIN = 'admin' # For site administration
     role = db.Column(db.String(20), default=ROLE_STUDENT, nullable=False)
     is_college_verified = db.Column(db.Boolean, default=False, nullable=False) # True if college affiliation is verified
@@ -282,3 +283,23 @@ class ReelLike(db.Model):
 
     def __repr__(self):
         return f'<ReelLike {self.id} on Reel {self.reel_id} by User {self.user_id}>'
+
+# --- Attendance Record Model ---
+
+class AttendanceRecord(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True) # Student
+    course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False, index=True) # Date of the class/session
+    status = db.Column(db.String(20), nullable=False) # e.g., 'present', 'absent', 'late', 'excused'
+    marked_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # User who marked attendance
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow) # Record creation/modification time
+
+    student = db.relationship('User', foreign_keys=[user_id], backref=db.backref('attendance_records', lazy='dynamic'))
+    course = db.relationship('Course', backref=db.backref('attendance_records', lazy='dynamic'))
+    marker = db.relationship('User', foreign_keys=[marked_by_id], backref=db.backref('marked_attendance_records', lazy='dynamic'))
+
+    __table_args__ = (db.UniqueConstraint('user_id', 'course_id', 'date', name='_student_course_date_uc'),)
+
+    def __repr__(self):
+        return f'<AttendanceRecord {self.id} for User {self.user_id} in Course {self.course_id} on {self.date} - {self.status}>'
