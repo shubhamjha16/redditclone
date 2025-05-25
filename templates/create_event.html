@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% import "bootstrap_wtf.html" as wtf %}
+
+{% block content %}
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <h2>{{ title }} for {{ college.name }}</h2>
+            <form method="POST" action="{{ url_for('create_event', college_id=college.id) }}">
+                {{ form.hidden_tag() }}
+                {{ wtf.form_field(form.name) }}
+                {{ wtf.form_field(form.description) }}
+                {{ wtf.form_field(form.date_time, type="datetime-local") }} {# Ensure browser renders datetime picker #}
+                {{ wtf.form_field(form.location) }}
+                {{ wtf.form_field(form.submit, button_type="submit", class="btn btn-primary") }}
+            </form>
+        </div>
+    </div>
+{% endblock %}

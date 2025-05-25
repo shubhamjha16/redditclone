@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Your Notifications</h2>
+        {% if notifications and notifications.items and get_unread_notifications_count() > 0 %}
+            <form action="{{ url_for('mark_all_notifications_as_read') }}" method="POST" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/> {# If CSRF is enabled globally #}
+                <button type="submit" class="btn btn-sm btn-outline-primary">Mark All as Read</button>
+            </form>
+        {% endif %}
+    </div>
+
+    {% if notifications and notifications.items %}
+        <ul class="list-group">
+            {% for notification in notifications.items %}
+                <li class="list-group-item {% if not notification.is_read %}list-group-item-info{% endif %}">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">
+                            {% set payload = notification.get_payload() %}
+                            {% if notification.name == 'new_comment_on_post' %}
+                                New comment on your post: "<a href="{{ url_for('view_post', post_id=payload.post_id, _anchor='comment-' + payload.comment_id|string) }}">{{ payload.post_title }}</a>"
+                            {% else %}
+                                {{ notification.name|replace('_', ' ')|title }} {# Generic display #}
+                            {% endif %}
+                        </h5>
+                        <small>{{ notification.timestamp.strftime('%Y-%m-%d %H:%M') }}</small>
+                    </div>
+                    {% if notification.name == 'new_comment_on_post' %}
+                        <p class="mb-1"><strong>{{ payload.commenter_username }}</strong> commented on your post.</p>
+                    {% endif %}
+                    
+                    {% if not notification.is_read %}
+                        <form action="{{ url_for('mark_notification_as_read', notification_id=notification.id) }}" method="POST" class="mt-2" style="display: inline;">
+                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/> {# If CSRF is enabled globally #}
+                            <button type="submit" class="btn btn-xs btn-outline-secondary">Mark as Read</button>
+                        </form>
+                    {% else %}
+                        <span class="badge badge-light float-right mt-1">Read</span>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+
+        {% if notifications.pages > 1 %}
+        <nav aria-label="Page navigation" class="mt-3">
+            <ul class="pagination justify-content-center">
+                {% if notifications.has_prev %}
+                    <li class="page-item"><a class="page-link" href="{{ url_for('list_notifications', page=notifications.prev_num) }}">Previous</a></li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">Previous</span></li>
+                {% endif %}
+                {% for page_num in notifications.iter_pages() %}
+                    {% if page_num %}
+                        {% if notifications.page == page_num %}
+                            <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                        {% else %}
+                            <li class="page-item"><a class="page-link" href="{{ url_for('list_notifications', page=page_num) }}">{{ page_num }}</a></li>
+                        {% endif %}
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endfor %}
+                {% if notifications.has_next %}
+                    <li class="page-item"><a class="page-link" href="{{ url_for('list_notifications', page=notifications.next_num) }}">Next</a></li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">Next</span></li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+
+    {% else %}
+        <p>You have no notifications.</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% import "bootstrap_wtf.html" as wtf %}
+
+{% block content %}
+    {# Main Post Display using card styling #}
+    <div class="post-card mb-4">
+        <div class="vote-controls">
+            <a href="{{ url_for('vote', target_type='post', target_id=post.id, vote_action='upvote') }}" class="vote-arrow {% if current_user.is_authenticated and post.votes.filter_by(user_id=current_user.id, vote_type=1).first() %}upvoted{% endif %}"><i class="fas fa-arrow-up"></i></a>
+            <span class="post-score">{{ post_score }}</span>
+            <a href="{{ url_for('vote', target_type='post', target_id=post.id, vote_action='downvote') }}" class="vote-arrow {% if current_user.is_authenticated and post.votes.filter_by(user_id=current_user.id, vote_type=-1).first() %}downvoted{% endif %}"><i class="fas fa-arrow-down"></i></a>
+        </div>
+        <div class="post-content-container">
+            <div class="post-meta">
+                Posted by <a href="{{ url_for('user_profile', username=post.author.username) }}">{{ post.author.username }}</a>
+                to <a href="{{ url_for('college_posts', college_id=post.college.id) }}">{{ post.college.name }}</a>
+                &bull; {{ post.timestamp.strftime('%b %d, %Y %I:%M %p') }}
+            </div>
+            <h3 class="post-title mt-1">{{ post.title }}</h3>
+            <div class="post-body-full" style="white-space: pre-line;"> {# Ensure newlines are rendered #}
+                {{ post.content }}
+            </div>
+            <div class="post-actions mt-2">
+                <a href="#comment-form"><i class="fas fa-comment-alt"></i> {{ post.comments.count() }} Comments</a>
+                {% if current_user.is_authenticated and current_user.id != post.author.id %}
+                     <a href="{{ url_for('report_post', post_id=post.id) }}"><i class="fas fa-flag"></i> Report</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# Comment Submission Form #}
+    {% if current_user.is_authenticated %}
+        <div class="card mb-4" id="comment-form">
+            <div class="card-body">
+                <h5 class="card-title">Leave a Comment</h5>
+                <form method="POST" action="{{ url_for('view_post', post_id=post.id) }}">
+                    {{ comment_form.hidden_tag() }}
+                    {{ wtf.form_field(comment_form.content, placeholder="What are your thoughts?") }}
+                    <button type="submit" class="btn btn-primary mt-2">Submit Comment</button>
+                </form>
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-light text-center">
+            <a href="{{ url_for('login', next=request.url) }}">Log in</a> or <a href="{{ url_for('register', next=request.url) }}">sign up</a> to leave a comment.
+        </div>
+    {% endif %}
+
+    {# Comments Section #}
+    <h4 class="mb-3" id="comments">Comments ({{ post.comments.count() }})</h4>
+    <div class="comment-thread">
+        {% if comments %}
+            {% for comment in comments %}
+                <div class="comment-card" id="comment-{{ comment.id }}">
+                    <div class="vote-controls">
+                        <a href="{{ url_for('vote', target_type='comment', target_id=comment.id, vote_action='upvote') }}" class="vote-arrow {% if current_user.is_authenticated and comment.votes.filter_by(user_id=current_user.id, vote_type=1).first() %}upvoted{% endif %}"><i class="fas fa-arrow-up"></i></a>
+                        <span class="post-score">{{ comment_scores[comment.id] if comment_scores else '0' }}</span>
+                        <a href="{{ url_for('vote', target_type='comment', target_id=comment.id, vote_action='downvote') }}" class="vote-arrow {% if current_user.is_authenticated and comment.votes.filter_by(user_id=current_user.id, vote_type=-1).first() %}downvoted{% endif %}"><i class="fas fa-arrow-down"></i></a>
+                    </div>
+                    <div class="comment-content-container">
+                        <div class="comment-meta">
+                            <a href="{{ url_for('user_profile', username=comment.author.username) }}">{{ comment.author.username }}</a>
+                            &bull; {{ comment.timestamp.strftime('%b %d, %Y %I:%M %p') }}
+                        </div>
+                        <div class="comment-body">
+                            {{ comment.content }}
+                        </div>
+                        <div class="post-actions mt-1">
+                             {% if current_user.is_authenticated and current_user.id != comment.author.id %}
+                                 <a href="{{ url_for('report_comment', comment_id=comment.id) }}"><i class="fas fa-flag"></i> Report</a>
+                            {% endif %}
+                            {# Add Reply button later #}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No comments yet. Be the first one!</p>
+        {% endif %}
+    </div>
+
+    {# Comments Pagination #}
+    {% if pagination and pagination.pages > 1 %}
+    <nav aria-label="Comment page navigation" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if pagination.has_prev %}
+                <li class="page-item"><a class="page-link" href="{{ url_for('view_post', post_id=post.id, page=pagination.prev_num, _anchor='comments') }}">Previous</a></li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">Previous</span></li>
+            {% endif %}
+            {% for page_num in pagination.iter_pages() %}
+                {% if page_num %}
+                    {% if pagination.page == page_num %}
+                        <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                    {% else %}
+                        <li class="page-item"><a class="page-link" href="{{ url_for('view_post', post_id=post.id, page=page_num, _anchor='comments') }}">{{ page_num }}</a></li>
+                    {% endif %}
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                {% endif %}
+            {% endfor %}
+            {% if pagination.has_next %}
+                <li class="page-item"><a class="page-link" href="{{ url_for('view_post', post_id=post.id, page=pagination.next_num, _anchor='comments') }}">Next</a></li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">Next</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+{% endblock %}
+
+{% block sidebar %}
+    {{ super() }} {# Includes the default sidebar content from base.html #}
+    <div class="sidebar-widget">
+        <h5>About Community</h5>
+        <p><strong>{{ post.college.name }}</strong></p>
+        <p>{{ post.college.location }}</p>
+        <a href="{{ url_for('college_posts', college_id=post.college.id) }}" class="btn btn-primary btn-block">View All Posts in {{ post.college.name }}</a>
+    </div>
+    {% if current_user.is_authenticated and current_user.college_id == post.college_id %}
+        <div class="sidebar-widget">
+             <a href="{{ url_for('create_post') }}" class="btn btn-success btn-block">Create Post in {{post.college.name}}</a>
+        </div>
+    {% endif %}
+{% endblock %}

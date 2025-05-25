@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h3>{{ course.name }} ({{ course.course_code }})</h3>
+            {# Add edit/delete buttons later if user is admin or creator (if applicable) #}
+            {# e.g., if current_user.is_admin or (current_user.is_authenticated and current_user.college_id == course.college_id and current_user has faculty role) #}
+        </div>
+        <div class="card-body">
+            <h5 class="card-title">Instructor: {{ course.instructor if course.instructor else "Not specified" }}</h5>
+            <p class="card-text"><strong>Description:</strong><br>{{ course.description if course.description else "No description provided." }}</p>
+            <p class="card-text"><small class="text-muted">College: {{ course.college.name }}</small></p>
+        </div>
+    </div>
+
+    <hr>
+    <h4>Study Groups for this Course</h4>
+    {% if course.study_groups.all() %}
+        <div class="list-group mt-3">
+            {% for group in course.study_groups.order_by(StudyGroup.name).all() %} {# Assuming StudyGroup model is available or passed #}
+                <a href="{{ url_for('view_study_group', group_id=group.id) }}" class="list-group-item list-group-item-action">
+                    {{ group.name }} - Created by {{ group.creator.username }}
+                </a>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>No study groups currently listed for this course.</p>
+    {% endif %}
+    {% if current_user.is_authenticated and current_user.college_id == course.college_id %}
+    <a href="{{ url_for('create_study_group', college_id=course.college_id, course_id=course.id) }}" class="btn btn-success mt-2">Start a Study Group for this Course</a>
+    {% endif %}
+</div>
+{% endblock %}

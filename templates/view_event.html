@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h3>Event: {{ event.name }}</h3>
+            {# Add edit/delete buttons later if user is admin or creator #}
+        </div>
+        <div class="card-body">
+            <p class="card-text"><strong>Date & Time:</strong> {{ event.date_time.strftime('%A, %B %d, %Y at %I:%M %p') }}</p>
+            <p class="card-text"><strong>Location:</strong> {{ event.location }}</p>
+            <hr>
+            <p class="card-text"><strong>Description:</strong><br>{{ event.description if event.description else "No description provided." }}</p>
+            <hr>
+            <p class="card-text"><strong>College:</strong> {{ event.college.name }}</p>
+            <p class="card-text"><strong>Posted by:</strong> {{ event.creator.username }}</p>
+            {# Placeholder for listing attendees #}
+            {# <h5>Attendees</h5> #}
+            {# {% if event.attending_users.all() %} ... {% else %} <p>No attendees yet. Be the first to RSVP!</p> {% endif %} #}
+            {# Add RSVP button later #}
+        </div>
+    </div>
+</div>
+{% endblock %}

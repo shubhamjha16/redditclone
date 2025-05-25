@@ -1,0 +1,341 @@
+/* Global & Layout */
+body {
+    font-family: Verdana, Arial, sans-serif;
+    background-color: #DAE0E6; /* Light gray-blueish background */
+    color: #1c1c1c;
+    padding-top: 50px; /* Height of the new compact navbar */
+    margin: 0;
+}
+
+.container-fluid { /* Allow full width for navbar */
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.main-container {
+    display: flex;
+    max-width: 1280px; /* Max width of content area */
+    margin: 20px auto;
+    padding: 0 15px;
+}
+
+.content-main {
+    flex: 1; /* Takes up available space */
+    max-width: 740px; /* Typical main content width */
+}
+
+.sidebar-right {
+    width: 300px;
+    margin-left: 24px;
+    /* background-color: #f0f0f0; */ /* Placeholder */
+}
+
+/* Navbar */
+.navbar.cc-navbar { /* cc for CampusConnect */
+    background-color: #ffffff; /* White navbar */
+    border-bottom: 1px solid #ccc;
+    padding: 0.25rem 1rem; /* More compact */
+    position: fixed;
+    top: 0;
+    width: 100%;
+    z-index: 1030;
+}
+
+.navbar.cc-navbar .navbar-brand {
+    font-weight: bold;
+    color: #0079D3; /* Reddit blue-ish */
+}
+
+.navbar.cc-navbar .form-control-sm {
+    max-width: 400px; /* Limit search bar width */
+}
+
+/* Post Card Styling */
+.post-card {
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    display: flex; /* For vote controls on left */
+}
+
+.vote-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px;
+    background-color: #f8f9fa; /* Light gray for vote area */
+    border-right: 1px solid #eee;
+    width: 40px; /* Fixed width for vote controls */
+}
+
+.vote-controls .vote-arrow {
+    color: #878A8C; /* Reddit arrow color */
+    font-size: 1.2rem; /* Make arrows a bit larger */
+    text-decoration: none;
+    line-height: 1;
+}
+.vote-controls .vote-arrow:hover {
+    color: #0079D3;
+}
+.vote-controls .vote-arrow.upvoted {
+    color: #FF4500; /* Reddit upvote color */
+}
+.vote-controls .vote-arrow.downvoted {
+    color: #7193FF; /* Reddit downvote color */
+}
+
+.post-score {
+    font-size: 0.9em;
+    font-weight: bold;
+    margin: 5px 0;
+    color: #1c1c1c;
+}
+
+.post-content-container {
+    padding: 10px;
+    flex: 1; /* Takes remaining space */
+    overflow: hidden; /* Prevent long titles/text from breaking layout */
+}
+
+.post-meta {
+    font-size: 0.8em;
+    color: #787C7E; /* Subdued meta text */
+    margin-bottom: 5px;
+}
+.post-meta a {
+    color: #0079D3;
+    text-decoration: none;
+}
+.post-meta a:hover {
+    text-decoration: underline;
+}
+
+.post-title {
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: #222222;
+    text-decoration: none;
+    margin-bottom: 5px;
+}
+.post-title:hover {
+    color: #0079D3;
+}
+
+.post-body-preview { /* For list views */
+    font-size: 0.9rem;
+    color: #1c1c1c;
+    max-height: 250px; /* Limit height of preview */
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.post-actions {
+    font-size: 0.8em;
+}
+.post-actions a {
+    color: #878A8C;
+    text-decoration: none;
+    margin-right: 10px;
+    font-weight: bold;
+}
+.post-actions a:hover {
+    text-decoration: underline;
+}
+
+/* Comment Styling */
+.comment-thread {
+    margin-top: 15px;
+}
+.comment-card {
+    background-color: #fff; /* Can be slightly different if needed */
+    border: 1px solid #eee;
+    border-radius: 3px;
+    margin-bottom: 8px;
+    padding: 8px;
+    display: flex; /* For vote controls */
+}
+.comment-content-container {
+    padding-left: 10px; /* Space from vote controls */
+    flex: 1;
+}
+.comment-meta {
+    font-size: 0.75em;
+    color: #787C7E;
+    margin-bottom: 3px;
+}
+.comment-body {
+    font-size: 0.9rem;
+    padding-top: 3px;
+    white-space: pre-line;
+}
+
+/* Sidebar Widgets/Cards */
+.sidebar-widget {
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 15px;
+}
+.sidebar-widget h5 {
+    font-size: 1rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #1c1c1c;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 6px;
+}
+.sidebar-widget .btn {
+    display: block;
+    width: 100%;
+    margin-bottom: 8px;
+}
+
+/* General Link Styling */
+a {
+    color: #0079D3;
+}
+a:hover {
+    color: #005999;
+}
+
+/* Flash messages (Bootstrap already provides some styling) */
+.alert {
+  margin-top: 0; /* Remove top margin if inside fixed navbar space */
+  border-radius: 0; /* Full width alerts */
+  position: fixed;
+  top: 50px; /* Below navbar */
+  width: 100%;
+  z-index: 1029; /* Below navbar but above content */
+}
+
+/* Responsive adjustments if needed later */
+@media (max-width: 992px) {
+    .sidebar-right {
+        display: none; /* Hide sidebar on smaller screens */
+    }
+    .content-main {
+        max-width: 100%;
+    }
+}
+
+/* Additional Media Queries for Refinement */
+
+/* Medium devices (tablets, less than 992px) */
+@media (max-width: 991.98px) {
+    .main-container {
+        margin: 10px auto; /* Reduce top/bottom margin */
+        padding: 0 10px;
+    }
+    .content-main {
+        /* Sidebar is already hidden by previous rule at this breakpoint */
+        margin-left: 0; /* Ensure no left margin if sidebar was there */
+    }
+    .navbar.cc-navbar .form-control-sm { /* Search bar in navbar */
+        max-width: 250px; /* Allow it to shrink a bit */
+    }
+    .post-card .post-title, .post-title { /* Reduce post title size */
+        font-size: 1.1rem;
+    }
+}
+
+/* Small devices (landscape phones, less than 768px) */
+@media (max-width: 767.98px) {
+    body {
+        padding-top: 45px; /* If navbar becomes even more compact */
+    }
+    .navbar.cc-navbar {
+        padding: 0.2rem 0.75rem;
+    }
+    .navbar.cc-navbar .form-control-sm { /* Search bar in navbar */
+        max-width: 180px; /* Further shrink or consider moving to collapsed menu */
+        font-size: 0.8rem;
+    }
+    .post-card {
+        flex-direction: column; /* Stack vote controls above content */
+        margin-bottom: 15px;
+    }
+    .vote-controls {
+        flex-direction: row; /* Make vote controls horizontal */
+        width: 100%;
+        justify-content: flex-start; /* Align to left */
+        padding: 5px 8px;
+        border-right: none;
+        border-bottom: 1px solid #eee;
+    }
+    .vote-controls .vote-arrow {
+        margin: 0 8px; /* Space out horizontal arrows */
+        font-size: 1.1rem;
+    }
+    .post-score {
+        margin: 0 8px; /* Adjust margin for horizontal layout */
+    }
+    .post-content-container {
+        padding: 8px; /* Slightly reduce padding */
+    }
+    .post-title {
+        font-size: 1rem; /* Further reduce post title */
+    }
+    .post-body-preview, .comment-body {
+        font-size: 0.85rem; /* Adjust body font size */
+    }
+    .comment-card .vote-controls { /* Also apply to comments */
+        flex-direction: row;
+        width: 100%;
+        justify-content: flex-start;
+        padding: 5px 8px;
+        border-right: none;
+        border-bottom: 1px solid #eee;
+    }
+     .comment-card .comment-content-container {
+        padding-left: 0; /* Remove padding when stacked */
+    }
+    /* Admin tables - make them scrollable */
+    .table-responsive-md-custom { /* Custom class to apply where needed */
+        display: block;
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .admin-dashboard-user-table th, .admin-dashboard-user-table td { /* Reduce padding for user table */
+        padding: 0.5rem;
+    }
+}
+
+/* Extra small devices (portrait phones, less than 576px) */
+@media (max-width: 575.98px) {
+    .navbar.cc-navbar .navbar-brand {
+        font-size: 1.1rem; /* Slightly smaller brand */
+    }
+    .navbar.cc-navbar .form-inline { /* Search bar in navbar */
+        width: 100%; /* Allow search to take more width if it's complex */
+        margin-top: 5px;
+        margin-bottom: 5px;
+    }
+     .navbar.cc-navbar .form-control-sm {
+        max-width: 100%;
+    }
+    .post-actions a, .comment-meta a {
+        font-size: 0.75rem; /* Smaller action links */
+    }
+    /* Further reduce padding on cards if needed */
+    .post-card .post-content-container, .comment-card .comment-content-container {
+        padding: 6px;
+    }
+    /* Ensure form inputs are usable */
+    .form-control {
+        font-size: 0.9rem; /* Ensure form inputs are not too small */
+    }
+    .btn {
+        font-size: 0.9rem; /* Ensure buttons are not too small */
+        padding: 0.3rem 0.6rem;
+    }
+    .btn-sm, .btn-xs { /* Ensure small/xs buttons are still tappable */
+        padding: 0.2rem 0.4rem;
+        font-size: 0.8rem;
+    }
+    .alert { /* Adjust flash message position if navbar height changes significantly */
+        top: 40px; /* Example if navbar is smaller */
+    }
+}

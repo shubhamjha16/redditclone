@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% import "bootstrap_wtf.html" as wtf %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <h2>{{ title }}</h2>
+            <form method="POST" action=""> {# Action URL will be set by the route #}
+                {{ form.hidden_tag() }}
+                {{ wtf.form_field(form.name) }}
+                {{ wtf.form_field(form.location) }}
+                <div class="form-group mt-3">
+                    {{ wtf.form_field(form.submit, button_type="submit", class="btn btn-primary") }}
+                    <a href="{{ url_for('admin_list_colleges') }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

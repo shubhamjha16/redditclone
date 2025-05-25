@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% import "bootstrap_wtf.html" as wtf %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <h2>Edit User: {{ user_to_edit.username }}</h2>
+            <form method="POST" action="{{ url_for('admin_edit_user', user_id=user_to_edit.id) }}">
+                {{ form.hidden_tag() }}
+                {{ wtf.form_field(form.username) }}
+                {{ wtf.form_field(form.email) }}
+
+                <div class="card my-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Current College Affiliation</h5>
+                        <p>
+                            <strong>College:</strong> {{ user_to_edit.college.name if user_to_edit.college else 'Not Specified' }}<br>
+                            <strong>Verified:</strong> 
+                            {% if user_to_edit.is_college_verified %}
+                                <span class="badge badge-success">Yes</span>
+                            {% else %}
+                                <span class="badge badge-warning">No</span>
+                            {% endif %}
+                        </p>
+                        {{ wtf.form_field(form.is_college_verified) }}
+                    </div>
+                </div>
+                
+                {{ wtf.form_field(form.role) }}
+                
+                <div class="form-group mt-3">
+                    {{ wtf.form_field(form.submit, button_type="submit", class="btn btn-primary") }}
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">Cancel</a> {# Or back to user list #}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

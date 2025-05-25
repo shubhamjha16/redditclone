@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Manage Colleges</h2>
+        <a href="{{ url_for('admin_create_college') }}" class="btn btn-primary">Add New College</a>
+    </div>
+
+    {% if colleges %}
+    <div class="table-responsive-md-custom">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Location</th>
+                    <th>User Count</th>
+                    <th>Post Count</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for college in colleges %}
+                <tr>
+                    <td>{{ college.id }}</td>
+                    <td><a href="{{ url_for('college_posts', college_id=college.id) }}">{{ college.name }}</a></td>
+                    <td>{{ college.location }}</td>
+                    <td>{{ college.users.count() }}</td>
+                    <td>{{ college.posts.count() }}</td>
+                    <td>
+                        <a href="{{ url_for('admin_edit_college', college_id=college.id) }}" class="btn btn-sm btn-info">Edit</a>
+                        {# Add delete button later if implemented #}
+                        {# <form action="{{ url_for('admin_delete_college', college_id=college.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this college? This action cannot be undone and might affect associated users and posts.');">
+                            <input type="submit" value="Delete" class="btn btn-sm btn-danger">
+                        </form> #}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+        <p>No colleges found. <a href="{{ url_for('admin_create_college') }}">Add the first one!</a></p>
+    {% endif %}
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary mt-3">Back to Admin Dashboard</a>
+</div>
+{% endblock %}

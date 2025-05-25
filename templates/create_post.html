@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% import "bootstrap_wtf.html" as wtf %}
+
+{% block content %}
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <h2>{{ title }}</h2>
+            <form method="POST" action="{{ url_for('create_post') }}">
+                {{ form.hidden_tag() }}
+                {{ wtf.form_field(form.title) }}
+                {{ wtf.form_field(form.content) }}
+                {{ wtf.form_field(form.submit, button_type="submit", class="btn btn-primary") }}
+            </form>
+        </div>
+    </div>
+{% endblock %}

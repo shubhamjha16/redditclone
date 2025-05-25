@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Search Results for "{{ query }}"</h2>
+    <hr>
+
+    {% if not posts and not courses and not colleges %}
+        <p>No results found. Try a different search term.</p>
+    {% endif %}
+
+    {% if posts %}
+        <h3>Posts ({{ posts|length }})</h3>
+        <div class="list-group mb-4">
+            {% for post in posts %}
+                <a href="{{ url_for('view_post', post_id=post.id) }}" class="list-group-item list-group-item-action">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">{{ post.title }}</h5>
+                        <small>By {{ post.author.username }} in {{ post.college.name }}</small>
+                    </div>
+                    <p class="mb-1">{{ post.content[:150] }}{% if post.content|length > 150 %}...{% endif %}</p>
+                    <small>Score: {{ get_target_score('Post', post.id) }} | Comments: {{ post.comments.count() }}</small>
+                </a>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    {% if courses %}
+        <h3>Courses ({{ courses|length }})</h3>
+        <div class="list-group mb-4">
+            {% for course in courses %}
+                <a href="{{ url_for('view_course', course_id=course.id) }}" class="list-group-item list-group-item-action">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">{{ course.name }} ({{ course.course_code }})</h5>
+                        <small>{{ course.college.name }}</small>
+                    </div>
+                    <p class="mb-1">{{ course.description[:150] if course.description else 'No description.' }}{% if course.description and course.description|length > 150 %}...{% endif %}</p>
+                    {% if course.instructor %}<small>Instructor: {{ course.instructor }}</small>{% endif %}
+                </a>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    {% if colleges %}
+        <h3>Colleges ({{ colleges|length }})</h3>
+        <div class="list-group mb-4">
+            {% for college in colleges %}
+                <a href="{{ url_for('college_posts', college_id=college.id) }}" class="list-group-item list-group-item-action">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">{{ college.name }}</h5>
+                    </div>
+                    <p class="mb-1">{{ college.location }}</p>
+                </a>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}

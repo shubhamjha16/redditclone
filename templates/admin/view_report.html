@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% import "bootstrap_wtf.html" as wtf %}
+
+{% block content %}
+<div class="container">
+    <h2>Report Details (ID: {{ report.id }})</h2>
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-3">
+                <div class="card-header">Report Information</div>
+                <div class="card-body">
+                    <p><strong>Reporter:</strong> {{ report.reporter.username }}</p>
+                    <p><strong>Reported At:</strong> {{ report.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                    <p><strong>Reason:</strong></p>
+                    <p style="white-space: pre-line;">{{ report.reason }}</p>
+                    <hr>
+                    <p><strong>Current Status:</strong> <span class="badge badge-{{ 'warning' if report.status == ReportStatus.PENDING else ('success' if report.status == ReportStatus.REVIEWED_NO_ACTION else 'danger') }}">{{ report.status.replace('_', ' ')|title }}</span></p>
+                    <p><strong>Admin Notes:</strong></p>
+                    <p style="white-space: pre-line;">{{ report.admin_notes if report.admin_notes else "No notes yet." }}</p>
+                </div>
+            </div>
+
+            {% if report.reported_post %}
+            <div class="card mb-3">
+                <div class="card-header">Reported Post Details (ID: {{ report.post_id }}) <a href="{{ url_for('view_post', post_id=report.post_id) }}" target="_blank" class="btn btn-sm btn-outline-primary float-right">View Post</a></div>
+                <div class="card-body">
+                    <h5>{{ report.reported_post.title }}</h5>
+                    <p style="white-space: pre-line;">{{ report.reported_post.content }}</p>
+                    <small class="text-muted">Author: {{ report.reported_post.author.username }} | College: {{ report.reported_post.college.name }} | Posted: {{ report.reported_post.timestamp.strftime('%Y-%m-%d %H:%M') }}</small>
+                </div>
+            </div>
+            {% elif report.reported_comment %}
+            <div class="card mb-3">
+                <div class="card-header">Reported Comment Details (ID: {{ report.comment_id }}) <a href="{{ url_for('view_post', post_id=report.reported_comment.post_id, _anchor='comment-' + report.comment_id|string) }}" target="_blank" class="btn btn-sm btn-outline-primary float-right">View Comment</a></div>
+                <div class="card-body">
+                    <p style="white-space: pre-line;">{{ report.reported_comment.content }}</p>
+                    <small class="text-muted">Author: {{ report.reported_comment.author.username }} | Posted: {{ report.reported_comment.timestamp.strftime('%Y-%m-%d %H:%M') }}</small>
+                    <hr>
+                    <p><strong>Original Post:</strong> <a href="{{ url_for('view_post', post_id=report.reported_comment.post_id) }}">{{ report.reported_comment.post.title }}</a></p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">Moderate Report</div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin_update_report_status', report_id=report.id) }}">
+                        {{ status_form.hidden_tag() }}
+                        {{ wtf.form_field(status_form.status) }}
+                        {{ wtf.form_field(status_form.admin_notes) }}
+                        <div class="form-group mt-3">
+                            {{ wtf.form_field(status_form.submit, button_type="submit", class="btn btn-primary") }}
+                        </div>
+                    </form>
+                    <hr>
+                    <h5>Moderation Actions:</h5>
+                    {% if report.reported_post %}
+                        {# Add buttons to directly delete post, warn user, ban user etc. #}
+                        <p><small>Future: Delete Post, Warn User {{ report.reported_post.author.username }}, Ban User {{ report.reported_post.author.username }}</small></p>
+                    {% elif report.reported_comment %}
+                        {# Add buttons to directly delete comment, warn user, ban user etc. #}
+                        <p><small>Future: Delete Comment, Warn User {{ report.reported_comment.author.username }}, Ban User {{ report.reported_comment.author.username }}</small></p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <a href="{{ url_for('admin_list_reports') }}" class="btn btn-secondary mt-3">Back to Reports List</a>
+</div>
+{% endblock %}

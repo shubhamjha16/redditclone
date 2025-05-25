@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h2>{{ title }}</h2>
+    <p>This is a basic admin dashboard. Only users with the 'admin' role can see this.</p>
+
+    <div class="list-group mb-4">
+        <a href="{{ url_for('admin_list_colleges') }}" class="list-group-item list-group-item-action">Manage Colleges</a>
+        <a href="{{ url_for('admin_list_reports') }}" class="list-group-item list-group-item-action">Manage Reported Content
+            {% set pending_reports = get_pending_reports_count() %}
+            {% if pending_reports > 0 %}
+                <span class="badge badge-warning float-right">{{ pending_reports }} Pending</span>
+            {% endif %}
+        </a>
+        {# Add links to other admin sections here, e.g., Manage Users (if different from below), Manage Site Settings #}
+    </div>
+    
+    <h3>User Management</h3>
+    <div class="table-responsive-md-custom">
+        <table class="table table-striped table-hover admin-dashboard-user-table">
+            <thead class="thead-dark">
+                <tr>
+                    <th>ID</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>College</th>
+                <th>Role</th>
+                <th>College Verified</th>
+                <th>Posts</th>
+                <th>Comments</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user_item in users %} {# Changed loop variable to avoid conflict if 'user' is in context #}
+            <tr>
+                <td>{{ user_item.id }}</td>
+                <td>{{ user_item.username }}</td>
+                <td>{{ user_item.email }}</td>
+                <td>{{ user_item.college.name if user_item.college else 'N/A' }}</td>
+                <td>{{ user_item.role.replace('_', ' ')|title }}</td>
+                <td>
+                    {% if user_item.is_college_verified %}
+                        <span class="badge badge-success">Yes</span>
+                    {% else %}
+                        <span class="badge badge-warning">No</span>
+                    {% endif %}
+                </td>
+                <td>{{ user_item.posts.count() }}</td>
+                <td>{{ user_item.comments.count() }}</td>
+                <td>
+                    <a href="{{ url_for('admin_edit_user', user_id=user_item.id) }}" class="btn btn-sm btn-info">Edit User</a>
+                    {# Add other actions like Ban/Unban later #}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="9">No users found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        </table>
+    </div>
+    {# Add pagination if user list becomes very long #}
+{% endblock %}

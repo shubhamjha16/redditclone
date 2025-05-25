@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-3">
+            <!-- Profile Sidebar -->
+            <div class="card">
+                <div class="card-body text-center">
+                    {# Placeholder for profile picture #}
+                    <img src="https://via.placeholder.com/150" alt="Profile Picture" class="img-fluid rounded-circle mb-3">
+                    <h4>{{ user.username }}</h4>
+                    {% if user.college %}
+                        <p class="text-muted">{{ user.college.name }}</p>
+                    {% else %}
+                        <p class="text-muted">No college specified.</p>
+                    {% endif %}
+                    {% if current_user == user %}
+                        <a href="{{ url_for('admin_edit_user', user_id=user.id) }}" class="btn btn-sm btn-outline-info mb-2">Edit Profile (Admin Route - for demo)</a>
+                        {# TODO: Create a separate user_edit_profile route for users to edit their own info #}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-9">
+            <!-- Profile Content -->
+            <div class="card">
+                <div class="card-header">
+                    User Information
+                </div>
+                <div class="card-body">
+                    <p><strong>Username:</strong> {{ user.username }}</p>
+                    <p><strong>Email:</strong> {{ user.email }}</p>
+                    {% if user.college %}
+                        <p><strong>College:</strong> {{ user.college.name }}</p>
+                        <p><strong>College Affiliation Verified:</strong> 
+                            {% if user.is_college_verified %}
+                                <span class="badge badge-success">Yes</span>
+                            {% else %}
+                                <span class="badge badge-warning">No</span>
+                                {% if current_user.role == User.ROLE_ADMIN and current_user != user %}
+                                    <small>(<a href="{{ url_for('admin_edit_user', user_id=user.id) }}">Verify as Admin</a>)</small>
+                                {% elif current_user == user %}
+                                    <small>(Verification pending or requires admin action)</small>
+                                {% endif %}
+                            {% endif %}
+                        </p>
+                    {% endif %}
+                    <p><strong>Role:</strong> {{ user.role.replace('_', ' ')|title }}</p>
+                    <p><strong>College ID:</strong> {{ user.college_id_input if user.college_id_input else "Not provided" }}</p>
+                    <p><strong>Year of College:</strong> {{ user.year_of_college if user.year_of_college else "Not provided" }}</p>
+                    <p><strong>Joined:</strong> {{ user.timestamp.strftime('%B %d, %Y') if user.timestamp else 'N/A' }}</p> {# Assuming User model has a timestamp for join date, else remove #}
+
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <div class="card-header">
+                    Recent Activity
+                </div>
+                <div class="card-body">
+                    <h5>Recent Posts (Last 5)</h5>
+                    {% if user_posts %}
+                        <ul class="list-group list-group-flush">
+                        {% for post in user_posts %}
+                            <li class="list-group-item">
+                                <a href="{{ url_for('view_post', post_id=post.id) }}">{{ post.title }}</a>
+                                <small class="text-muted float-right">{{ post.timestamp.strftime('%Y-%m-%d') }}</small>
+                            </li>
+                        {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p>{{ user.username }} has not made any posts yet.</p>
+                    {% endif %}
+                    <hr>
+                    <h5>Recent Comments (Last 5)</h5>
+                     {% if user_comments %}
+                        <ul class="list-group list-group-flush">
+                        {% for comment in user_comments %}
+                            <li class="list-group-item">
+                                "{{ comment.content[:75] }}{% if comment.content|length > 75 %}...{% endif %}" 
+                                on post <a href="{{ url_for('view_post', post_id=comment.post_id, _anchor='comment-' + comment.id|string) }}">{{ comment.post.title }}</a>
+                                <small class="text-muted float-right">{{ comment.timestamp.strftime('%Y-%m-%d') }}</small>
+                            </li>
+                        {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p>{{ user.username }} has not made any comments yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

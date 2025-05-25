@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>{{ title }} - CampusConnect</title>
+    <!-- Add Bootstrap CSS or any other global CSS here -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css"> <!-- Font Awesome for vote arrows -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"> 
+  </head>
+  <body>
+    <div class="container-fluid">
+        <nav class="navbar navbar-expand-lg navbar-light cc-navbar">
+            <a class="navbar-brand" href="{{ url_for('index') }}">CampusConnect</a>
+            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNavDropdown">
+                <ul class="navbar-nav mr-auto">
+                    <li class="nav-item active">
+                        <a class="nav-link" href="{{ url_for('index') }}">Home <span class="sr-only">(current)</span></a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownCollegesLink" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            Colleges
+                        </a>
+                        <div class="dropdown-menu" aria-labelledby="navbarDropdownCollegesLink">
+                            {% set nav_colleges = get_colleges_for_navbar() %}
+                            {% if nav_colleges %}
+                                {% for nav_college in nav_colleges %}
+                                    <a class="dropdown-item" href="{{ url_for('college_posts', college_id=nav_college.id) }}">{{ nav_college.name }}</a>
+                                {% endfor %}
+                            {% else %}
+                                <a class="dropdown-item" href="#">No colleges yet</a>
+                            {% endif %}
+                             {% if current_user.is_authenticated and current_user.role == User.ROLE_ADMIN %}
+                                <div class="dropdown-divider"></div>
+                                <a class="dropdown-item" href="{{ url_for('admin_list_colleges') }}">Manage Colleges</a>
+                            {% endif %}
+                        </div>
+                    </li>
+                     {% if current_user.is_authenticated and current_user.college_id %}
+                      <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownMyCollegeLink" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                          My College ({{ current_user.college.name }})
+                        </a>
+                        <div class="dropdown-menu" aria-labelledby="navbarDropdownMyCollegeLink">
+                          <a class="dropdown-item" href="{{ url_for('college_posts', college_id=current_user.college_id) }}">Posts</a>
+                          <a class="dropdown-item" href="{{ url_for('list_college_courses', college_id=current_user.college_id) }}">Courses</a>
+                          <a class="dropdown-item" href="{{ url_for('list_college_study_groups', college_id=current_user.college_id) }}">Study Groups</a>
+                          <a class="dropdown-item" href="{{ url_for('list_college_events', college_id=current_user.college_id) }}">Events</a>
+                        </div>
+                      </li>
+                    {% endif %}
+                </ul>
+
+                <form class="form-inline my-2 my-lg-0 mx-auto" action="{{ url_for('search') }}" method="get" style="flex-grow: 0.5;">
+                    {{ search_form.hidden_tag() if search_form.hidden_tag }}
+                    <div class="input-group input-group-sm" style="width:100%;">
+                        {{ search_form.query(class="form-control", placeholder="Search CampusConnect...") }}
+                        <div class="input-group-append">
+                            {{ search_form.submit(class="btn btn-outline-secondary") }}
+                        </div>
+                    </div>
+                </form>
+
+                <ul class="navbar-nav ml-auto">
+                    {% if current_user.is_authenticated %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('list_notifications') }}">
+                                <i class="fas fa-bell"></i>
+                                {% set unread_count = get_unread_notifications_count() %}
+                                {% if unread_count > 0 %}
+                                    <span class="badge badge-danger">{{ unread_count }}</span>
+                                {% endif %}
+                            </a>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarUserDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                <i class="fas fa-user"></i> {{ current_user.username }}
+                            </a>
+                            <div class="dropdown-menu dropdown-menu-right" aria-labelledby="navbarUserDropdown">
+                                <a class="dropdown-item" href="{{ url_for('user_profile', username=current_user.username) }}">My Profile</a>
+                                {% if current_user.role == User.ROLE_ADMIN %}
+                                    <a class="dropdown-item" href="{{ url_for('admin_dashboard') }}">Admin Dashboard</a>
+                                {% endif %}
+                                <div class="dropdown-divider"></div>
+                                <a class="dropdown-item" href="{{ url_for('logout') }}">Logout</a>
+                            </div>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('login') }}">Login</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('register') }}">Sign Up</a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </nav>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          {# Flash messages are now fixed at top via CSS #}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="main-container">
+        <div class="content-main">
+            {% block content %}{% endblock %}
+        </div>
+        <aside class="sidebar-right">
+            {% block sidebar %}
+                {% if current_user.is_authenticated and current_user.college %}
+                    <div class="sidebar-widget">
+                        <h5>{{ current_user.college.name }}</h5>
+                        <p><small>{{ current_user.college.location }}</small></p>
+                        {# Add more dynamic college info here later #}
+                        <a href="{{ url_for('college_posts', college_id=current_user.college.id) }}" class="btn btn-outline-primary btn-sm">View College Posts</a>
+                    </div>
+                {% endif %}
+
+                {% if current_user.is_authenticated and current_user.college_id %}
+                 <div class="sidebar-widget">
+                    <a href="{{ url_for('create_post') }}" class="btn btn-primary">Create Post</a>
+                 </div>
+                {% endif %}
+                
+                {% if current_user.is_authenticated and current_user.role == User.ROLE_ADMIN %}
+                <div class="sidebar-widget">
+                    <h5>Admin Actions</h5>
+                    <a href="{{ url_for('admin_create_college') }}" class="btn btn-info">Create College/Community</a>
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">Admin Dashboard</a>
+                </div>
+                {% endif %}
+
+                <div class="sidebar-widget">
+                    <h5>CampusConnect Info</h5>
+                    <p>Welcome to CampusConnect! Share posts, join discussions, and connect with your college community.</p>
+                    <small><a href="#">About</a> &bull; <a href="#">Help</a> &bull; <a href="#">Content Policy</a></small>
+                </div>
+            {% endblock sidebar %}
+        </aside>
+    </div>
+
+    <!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS. Popper.js is often included with Bootstrap's bundle. -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.2/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+  </body>
+</html>

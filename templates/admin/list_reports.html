@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Manage Reported Content ({{ reports.total }} Pending)</h2>
+        {# Add filtering options later if needed, e.g., by status #}
+    </div>
+
+    {% if reports.items %}
+    <div class="table-responsive-md-custom">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Type</th>
+                    <th>Reported Item ID</th>
+                    <th>Preview</th>
+                    <th>Reporter</th>
+                    <th>Reason</th>
+                    <th>Reported At</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for report in reports.items %}
+                <tr>
+                    <td>{{ report.id }}</td>
+                    <td>
+                        {% if report.post_id %} Post
+                        {% elif report.comment_id %} Comment
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if report.post_id %}
+                            <a href="{{ url_for('view_post', post_id=report.post_id) }}" target="_blank">{{ report.post_id }}</a>
+                        {% elif report.comment_id %}
+                            <a href="{{ url_for('view_post', post_id=report.reported_comment.post_id, _anchor='comment-' + report.comment_id|string) }}" target="_blank">{{ report.comment_id }}</a>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if report.post_id and report.reported_post %}
+                            {{ report.reported_post.title[:50] }}...
+                        {% elif report.comment_id and report.reported_comment %}
+                            {{ report.reported_comment.content[:50] }}...
+                        {% endif %}
+                    </td>
+                    <td>{{ report.reporter.username }}</td>
+                    <td>{{ report.reason[:50] }}...</td>
+                    <td>{{ report.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td><span class="badge badge-{{ 'warning' if report.status == ReportStatus.PENDING else ('success' if report.status == ReportStatus.REVIEWED_NO_ACTION else 'danger') }}">{{ report.status.replace('_', ' ')|title }}</span></td>
+                    <td>
+                        <a href="{{ url_for('admin_view_report', report_id=report.id) }}" class="btn btn-sm btn-info">View Details</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+         {% if reports.pages > 1 %}
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center">
+                    {% if reports.has_prev %}
+                        <li class="page-item"><a class="page-link" href="{{ url_for('admin_list_reports', page=reports.prev_num) }}">Previous</a></li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">Previous</span></li>
+                    {% endif %}
+                    {% for page_num in reports.iter_pages() %}
+                        {% if page_num %}
+                            {% if reports.page == page_num %}
+                                <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                            {% else %}
+                                <li class="page-item"><a class="page-link" href="{{ url_for('admin_list_reports', page=page_num) }}">{{ page_num }}</a></li>
+                            {% endif %}
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    {% if reports.has_next %}
+                        <li class="page-item"><a class="page-link" href="{{ url_for('admin_list_reports', page=reports.next_num) }}">Next</a></li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">Next</span></li>
+                    {% endif %}
+                </ul>
+            </nav>
+        {% endif %}
+    {% else %}
+        <p>No pending reports found.</p>
+    {% endif %}
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary mt-3">Back to Admin Dashboard</a>
+</div>
+{% endblock %}
