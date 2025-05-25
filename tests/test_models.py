@@ -153,3 +153,117 @@ def test_college_user_relationship(init_database, new_user, new_college):
         assert new_college.users.count() == 1
         assert new_user in new_college.users.all()
         assert new_user.college == new_college
+
+
+# --- Tests for User Model Enhancements (Profile, Follow/Unfollow, Followed Posts) ---
+
+def test_user_profile_fields(init_database, new_user): # new_user fixture can be used for a single user test
+    """Test the new profile fields on the User model."""
+    with init_database.app.app_context():
+        # new_user is already added to the session by its fixture if it does db operations
+        # For this test, let's assume new_user is a fresh instance or we fetch it
+        user = User.query.filter_by(username=new_user.username).first()
+        if not user: # If new_user fixture doesn't commit, we might need to add and commit it.
+                     # Assuming new_user is already in db from fixture.
+            user = new_user 
+            db.session.add(user) # Ensure it's in the session if not already
+            db.session.commit() # Commit to get ID and ensure it's queryable
+
+        user.profile_picture_url = "http://example.com/pic.jpg"
+        user.bio = "This is a test bio."
+        # last_seen is set on creation, and also by before_request handler in a live app
+        # For model testing, we check its default initialization or manual setting.
+        user.last_seen = datetime.utcnow() # Explicitly set for test clarity if needed
+        
+        db.session.commit()
+
+        retrieved_user = User.query.filter_by(username=user.username).first()
+        assert retrieved_user.profile_picture_url == "http://example.com/pic.jpg"
+        assert retrieved_user.bio == "This is a test bio."
+        assert isinstance(retrieved_user.last_seen, datetime)
+        # Check if last_seen is recent (e.g., within a few seconds of now)
+        assert (datetime.utcnow() - retrieved_user.last_seen).total_seconds() < 5
+
+def test_follow_unfollow(init_database):
+    """Test the follow and unfollow functionality."""
+    with init_database.app.app_context():
+        u1 = User(username='user1', email='user1@example.com')
+        u1.set_password('password')
+        u2 = User(username='user2', email='user2@example.com')
+        u2.set_password('password')
+        db.session.add_all([u1, u2])
+        db.session.commit()
+
+        # Test initial state
+        assert not u1.is_following(u2)
+        assert not u2.is_following(u1)
+        assert u1.followed.count() == 0
+        assert u1.followers.count() == 0
+        assert u2.followed.count() == 0
+        assert u2.followers.count() == 0
+
+        # Test follow action: u1 follows u2
+        u1.follow(u2)
+        db.session.commit()
+        assert u1.is_following(u2)
+        assert not u2.is_following(u1) # u2 does not automatically follow u1
+        assert u1.followed.count() == 1
+        assert u1.followed.first().username == 'user2'
+        assert u2.followers.count() == 1
+        assert u2.followers.first().username == 'user1'
+
+        # Test that following an already followed user doesn't duplicate
+        u1.follow(u2)
+        db.session.commit()
+        assert u1.followed.count() == 1
+
+        # Test unfollow action: u1 unfollows u2
+        u1.unfollow(u2)
+        db.session.commit()
+        assert not u1.is_following(u2)
+        assert u1.followed.count() == 0
+        assert u2.followers.count() == 0
+
+def test_followed_posts_basic(init_database, new_college): # Added new_college fixture
+    """Test the followed_posts method for basic functionality."""
+    with init_database.app.app_context():
+        u1 = User(username='user1_fp', email='user1_fp@example.com')
+        u1.set_password('password')
+        u2 = User(username='user2_fp', email='user2_fp@example.com')
+        u2.set_password('password')
+        db.session.add_all([u1, u2])
+        db.session.commit() # Commit users first to assign IDs
+
+        # Create posts
+        post_u1 = Post(title="U1 Post", content="Content by U1", user_id=u1.id, college_id=new_college.id)
+        post_u2 = Post(title="U2 Post", content="Content by U2", user_id=u2.id, college_id=new_college.id)
+        db.session.add_all([post_u1, post_u2])
+        db.session.commit()
+
+        # u1 follows u2
+        u1.follow(u2)
+        db.session.commit()
+
+        followed_posts_query = u1.followed_posts()
+        assert followed_posts_query is not None
+        
+        followed_posts_list = followed_posts_query.all()
+        
+        # Check that u2's post is in u1's followed posts
+        assert post_u2 in followed_posts_list
+        # Check that u1's own post is also in their followed posts
+        assert post_u1 in followed_posts_list
+        
+        # Check order (most recent first) - assuming post_u1 and post_u2 are added close in time
+        # For more robust order testing, manipulate timestamps explicitly.
+        # Here, we primarily care about inclusion.
+        assert len(followed_posts_list) == 2
+
+        # Unfollow and check again
+        u1.unfollow(u2)
+        db.session.commit()
+        
+        followed_posts_after_unfollow = u1.followed_posts().all()
+        assert post_u2 not in followed_posts_after_unfollow
+        assert post_u1 in followed_posts_after_unfollow # Own posts should still be there
+        assert len(followed_posts_after_unfollow) == 1

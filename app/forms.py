@@ -23,6 +23,8 @@ class RegistrationForm(FlaskForm):
     ]
     year_of_college = SelectField('Year of College (Optional)', choices=year_of_college_choices, validators=[])
     role = SelectField('Role', choices=[(User.ROLE_STUDENT, 'Student'), (User.ROLE_ALUMNI, 'Alumni')], validators=[DataRequired()])
+    profile_picture_url = StringField('Profile Picture URL (Optional)', validators=[Length(max=255)])
+    bio = StringField('Bio (Optional)', widget=TextArea(), validators=[Length(max=500)])
     submit = SubmitField('Register')
 
     def validate_username(self, username):
@@ -41,16 +43,32 @@ class LoginForm(FlaskForm):
     remember_me = BooleanField('Remember Me')
     submit = SubmitField('Login')
 
+class EditProfileForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired(), Length(min=3, max=64)])
+    profile_picture_url = StringField('Profile Picture URL (Optional)', validators=[Length(max=255)])
+    bio = StringField('Bio (Optional)', widget=TextArea(), validators=[Length(max=500)])
+    submit = SubmitField('Update Profile')
+
+    def __init__(self, original_username, *args, **kwargs):
+        super(EditProfileForm, self).__init__(*args, **kwargs)
+        self.original_username = original_username
+
+    def validate_username(self, username):
+        if username.data != self.original_username:
+            user = User.query.filter_by(username=self.username.data).first()
+            if user:
+                raise ValidationError('That username is already taken. Please choose a different one.')
+
 class PostForm(FlaskForm):
     title = StringField('Title', validators=[DataRequired(), Length(min=1, max=140)])
     content = StringField('Content', validators=[DataRequired(), Length(min=1, max=10000)], widget=TextArea()) # Use TextArea for larger input
     submit = SubmitField('Submit Post')
 
 # Need to import TextArea first
-from wtforms.widgets import TextArea
+from wtforms.widgets import TextArea # This import is already here, ensure it stays
 from wtforms.fields import DateTimeField # For EventForm
 from wtforms_sqlalchemy.fields import QuerySelectField # For StudyGroupForm course selection
-from app.models import Course # To populate QuerySelectField
+from app.models import Course, ReportStatus # To populate QuerySelectField and for ReportStatusUpdateForm
 
 class CommentForm(FlaskForm):
     content = StringField('Comment', validators=[DataRequired(), Length(min=1, max=1000)], widget=TextArea())
@@ -115,6 +133,9 @@ class AdminEditUserForm(FlaskForm):
     # Add college selection if admin should be able to change it. For now, assume it's fixed or handled elsewhere.
     # college = QuerySelectField('College', query_factory=lambda: College.query.all(), get_label='name', allow_blank=True, blank_text='-- No College --')
     submit = SubmitField('Update User')
+
+# Ensure ReportStatus is imported (it's added in the import block above)
+# from app.models import ReportStatus # Handled above
 
 class SearchForm(FlaskForm):
     query = StringField('Search', validators=[DataRequired(), Length(min=1, max=200)])

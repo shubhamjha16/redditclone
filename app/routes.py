@@ -4,13 +4,14 @@ from app.forms import (
     LoginForm, RegistrationForm, PostForm, CommentForm,
     CourseForm, StudyGroupForm, EventForm, get_college_courses,
     CollegeForm, ReportForm, ReportStatusUpdateForm, AdminEditUserForm,
-    SearchForm 
+    SearchForm, EditProfileForm
 )
 from app.models import (User, College, Post, Comment, Vote, VoteType, 
                         Course, StudyGroup, Event, Report, ReportStatus, Notification) # Added Notification
 from app.utils import get_target_score, send_notification # Added send_notification
 from flask_login import login_user, logout_user, current_user, login_required
-from sqlalchemy import or_ 
+from sqlalchemy import or_
+from datetime import datetime
 
 
 @app.route('/')
@@ -74,7 +75,9 @@ def register():
             role=form.role.data,
             is_college_verified=False,
             college_id_input=form.college_id_input.data,
-            year_of_college=form.year_of_college.data if form.year_of_college.data else None
+            year_of_college=form.year_of_college.data if form.year_of_college.data else None,
+            profile_picture_url=form.profile_picture_url.data,
+            bio=form.bio.data
         )
         user.set_password(form.password.data)
         db.session.add(user)
@@ -731,3 +734,55 @@ def mark_all_notifications_as_read():
     db.session.commit()
     flash('All notifications marked as read.', 'success')
     return redirect(url_for('list_notifications'))
+
+# -------------------------- Edit Profile Route --------------------------
+@app.route('/edit_profile', methods=['GET', 'POST'])
+@login_required
+def edit_profile():
+    form = EditProfileForm(original_username=current_user.username)
+    if form.validate_on_submit():
+        current_user.username = form.username.data
+        current_user.profile_picture_url = form.profile_picture_url.data
+        current_user.bio = form.bio.data
+        db.session.commit()
+        flash('Your profile has been updated!', 'success')
+        return redirect(url_for('user_profile', username=current_user.username))
+    elif request.method == 'GET':
+        form.username.data = current_user.username
+        form.profile_picture_url.data = current_user.profile_picture_url
+        form.bio.data = current_user.bio
+    return render_template('edit_profile.html', title='Edit Profile', form=form)
+
+# -------------------------- Follow/Unfollow Routes --------------------------
+@app.route('/follow/<username>', methods=['POST'])
+@login_required
+def follow(username):
+    user = User.query.filter_by(username=username).first_or_404()
+    if user == current_user:
+        flash('You cannot follow yourself.', 'warning')
+        return redirect(url_for('user_profile', username=username))
+    current_user.follow(user)
+    db.session.commit()
+    flash(f'You are now following {username}.', 'success')
+    # TODO: Send notification to 'user' that current_user is now following them
+    # send_notification(user.id, 'new_follower', {'follower_id': current_user.id, 'follower_username': current_user.username})
+    return redirect(url_for('user_profile', username=username))
+
+@app.route('/unfollow/<username>', methods=['POST'])
+@login_required
+def unfollow(username):
+    user = User.query.filter_by(username=username).first_or_404()
+    if user == current_user: # Should not happen if UI prevents this
+        flash('You cannot unfollow yourself.', 'warning')
+        return redirect(url_for('user_profile', username=username))
+    current_user.unfollow(user)
+    db.session.commit()
+    flash(f'You have unfollowed {username}.', 'info')
+    return redirect(url_for('user_profile', username=username))
+
+# -------------------------- Before Request Handler (last_seen) -----------------
+@app.before_request
+def before_request_handler():
+    if current_user.is_authenticated:
+        current_user.last_seen = datetime.utcnow()
+        db.session.commit()

@@ -1,38 +1,71 @@
 {% extends "base.html" %}
 
-{% block content %}
+{% block app_content %}
 <div class="container mt-4">
     <div class="row">
-        <div class="col-md-3">
+        <div class="col-md-4">
             <!-- Profile Sidebar -->
             <div class="card">
                 <div class="card-body text-center">
-                    {# Placeholder for profile picture #}
-                    <img src="https://via.placeholder.com/150" alt="Profile Picture" class="img-fluid rounded-circle mb-3">
+                    {# Profile Picture #}
+                    {% if user.profile_picture_url %}
+                        <img src="{{ user.profile_picture_url }}" alt="{{ user.username }}'s Profile Picture" class="img-fluid rounded-circle mb-3" style="width:128px; height:128px; object-fit: cover;">
+                    {% else %}
+                        <img src="{{ url_for('static', filename='images/default_avatar.png') }}" alt="Default Profile Picture" class="img-fluid rounded-circle mb-3" style="width:128px; height:128px; object-fit: cover;">
+                        {# Assuming 'static/images/default_avatar.png' or using a placeholder service #}
+                    {% endif %}
+                    
                     <h4>{{ user.username }}</h4>
+
                     {% if user.college %}
                         <p class="text-muted">{{ user.college.name }}</p>
                     {% else %}
                         <p class="text-muted">No college specified.</p>
                     {% endif %}
-                    {% if current_user == user %}
-                        <a href="{{ url_for('admin_edit_user', user_id=user.id) }}" class="btn btn-sm btn-outline-info mb-2">Edit Profile (Admin Route - for demo)</a>
-                        {# TODO: Create a separate user_edit_profile route for users to edit their own info #}
+
+                    {# Bio #}
+                    {% if user.bio %}
+                        <p class="text-left mt-3"><strong>Bio:</strong><br>{{ user.bio }}</p>
                     {% endif %}
+
+                    {# Last Seen #}
+                    {% if user.last_seen %}
+                        <p class="text-muted mt-3"><small>Last seen: {{ user.last_seen.strftime('%Y-%m-%d %H:%M') }} UTC</small></p>
+                    {% endif %}
+
+                    {# Follower/Following Counts #}
+                    <p class="mt-3">
+                        Followers: {{ user.followers.count() }} | Following: {{ user.followed.count() }}
+                    </p>
+
+                    {# Edit/Follow/Unfollow Buttons #}
+                    <div class="mt-3">
+                        {% if current_user.is_authenticated %}
+                            {% if current_user == user %}
+                                <a href="{{ url_for('edit_profile') }}" class="btn btn-secondary btn-block">Edit Profile</a>
+                            {% else %}
+                                {% if current_user.is_following(user) %}
+                                    <form action="{{ url_for('unfollow', username=user.username) }}" method="POST" style="display: block;">
+                                        <input type="submit" value="Unfollow" class="btn btn-danger btn-block">
+                                    </form>
+                                {% else %}
+                                    <form action="{{ url_for('follow', username=user.username) }}" method="POST" style="display: block;">
+                                        <input type="submit" value="Follow" class="btn btn-primary btn-block">
+                                    </form>
+                                {% endif %}
+                            {% endif %}
+                        {% endif %}
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="col-md-9">
-            <!-- Profile Content -->
-            <div class="card">
+
+            <div class="card mt-3">
                 <div class="card-header">
-                    User Information
+                    Detailed Information
                 </div>
-                <div class="card-body">
-                    <p><strong>Username:</strong> {{ user.username }}</p>
+                <div class="card-body text-left">
                     <p><strong>Email:</strong> {{ user.email }}</p>
                     {% if user.college %}
-                        <p><strong>College:</strong> {{ user.college.name }}</p>
                         <p><strong>College Affiliation Verified:</strong> 
                             {% if user.is_college_verified %}
                                 <span class="badge badge-success">Yes</span>
@@ -49,18 +82,20 @@
                     <p><strong>Role:</strong> {{ user.role.replace('_', ' ')|title }}</p>
                     <p><strong>College ID:</strong> {{ user.college_id_input if user.college_id_input else "Not provided" }}</p>
                     <p><strong>Year of College:</strong> {{ user.year_of_college if user.year_of_college else "Not provided" }}</p>
-                    <p><strong>Joined:</strong> {{ user.timestamp.strftime('%B %d, %Y') if user.timestamp else 'N/A' }}</p> {# Assuming User model has a timestamp for join date, else remove #}
-
+                    <p><strong>Joined:</strong> {{ user.timestamp.strftime('%B %d, %Y') if user.timestamp else 'N/A' }}</p>
                 </div>
             </div>
 
-            <div class="card mt-4">
+        </div>
+        <div class="col-md-8">
+            <!-- Profile Content / User Activity -->
+            <div class="card">
                 <div class="card-header">
-                    Recent Activity
+                    {{ user.username }}'s Activity
                 </div>
                 <div class="card-body">
                     <h5>Recent Posts (Last 5)</h5>
-                    {% if user_posts %}
+                    {% if user_posts and user_posts|length > 0 %}
                         <ul class="list-group list-group-flush">
                         {% for post in user_posts %}
                             <li class="list-group-item">
@@ -72,13 +107,15 @@
                     {% else %}
                         <p>{{ user.username }} has not made any posts yet.</p>
                     {% endif %}
-                    <hr>
+                    
+                    <hr class="my-4">
+
                     <h5>Recent Comments (Last 5)</h5>
-                     {% if user_comments %}
+                     {% if user_comments and user_comments|length > 0 %}
                         <ul class="list-group list-group-flush">
                         {% for comment in user_comments %}
                             <li class="list-group-item">
-                                "{{ comment.content[:75] }}{% if comment.content|length > 75 %}...{% endif %}" 
+                                "{{ comment.content|truncate(75) }}{% if comment.content|length > 75 %}...{% endif %}" 
                                 on post <a href="{{ url_for('view_post', post_id=comment.post_id, _anchor='comment-' + comment.id|string) }}">{{ comment.post.title }}</a>
                                 <small class="text-muted float-right">{{ comment.timestamp.strftime('%Y-%m-%d') }}</small>
                             </li>
