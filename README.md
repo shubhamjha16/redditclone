@@ -40,6 +40,17 @@ Features:
     *   **Fee Tracking Integration**: Provides tools for defining fee structures (e.g., tuition, lab fees) and tracking student payments, including amounts due, amounts paid, and payment statuses. (Key models: `FeeStructure`, `StudentFee`)
     *   **Timetable Scheduling (Simplified)**: Enables the definition of course schedules, including days of the week, start and end times, and locations for course sessions. (Key model: `TimeSlot`)
     *   **Resource Allocation**: Manages college resources like classrooms and equipment. Allows for defining resource types, specific resources, and booking them for courses or events. (Key models: `ResourceType`, `Resource`, `ResourceBooking`)
+*   **RFID and Security Management System:**
+    *   **RFID Card Management**: Manages RFID cards for identity verification and access control. (Key model: `RFIDCard`)
+    *   **Access Control**: Defines and manages RFID-enabled access points (e.g., doors, labs) and logs all access attempts, successful or denied. (Key models: `AccessPoint`, `AccessLog`)
+    *   **Security Patrol Logging**: Allows security personnel to log their activities, observations, and shift details, similar to a digital guard logbook. (Key model: `SecurityPatrolLog`)
+    *   **Security Camera Catalog**: Catalogs security cameras within the institution, including their location and status. (Key model: `SecurityCamera`)
+    *   **Incident Reporting**: Logs security incidents, detailing the type, description, location, severity, and actions taken. (Key model: `SecurityIncident`)
+*   **Online Library System:**
+    *   **Book Catalog & Categorization**: Manages a catalog of books, including details like title, author, ISBN, publisher, and categorization. Supports physical and e-books. (Key models: `Book`, `BookCategory`, `EBook`)
+    *   **Loan Management**: Tracks the lending of books to users, including loan dates, due dates, and return status. (Key model: `LibraryLoan`)
+    *   **Fine Management**: Handles fines for overdue or damaged books, tracking amounts owed and payment status. (Key model: `Fine`)
+    *   **Book Reservations**: Allows users to reserve books that are currently checked out. (Key model: `BookReservation`)
 *   Search functionality (posts, courses, colleges).
 *   User notification system (e.g., for new comments on posts).
 *   Reels Section (Instagram-like):
