@@ -45,6 +45,26 @@
 *   Mobile-responsive design.
 *   Comprehensive test suite (Pytest).
 
+*   Hackathon Management System (Integrated Module)
+
+This module extends the Reddit-style College Community Platform by enabling colleges to organize, manage, and host hackathons within their dedicated community spaces. It streamlines event creation, team registration, project submission, judging, and result publishing — all from within the same platform.
+
+Features:
+
+College-specific Hackathon Listings: Display upcoming, ongoing, and past hackathons.
+
+User Registration: Solo or team-based signups using verified college profiles.
+
+Project Submission System: Upload GitHub repos, design links, demos, and documentation.
+
+Judging Dashboard: Score, review, and rank submissions with role-based access for judges.
+
+Result & Certificate Generation: Auto-publish winners and generate participation/winner certificates.
+
+Discussion & Collaboration: Built-in comments, Q&A, and team-finding threads.
+
+Notification System: Alerts for deadlines, updates, and feedback.
+
 **Technologies Used:**
 *   Backend: Python, Flask, SQLAlchemy, Gunicorn
 *   Frontend: HTML, CSS, Bootstrap (for basic structure and components)
