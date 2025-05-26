@@ -556,3 +556,250 @@ class HackathonTeam(db.Model):
 
     def __repr__(self):
         return f'<HackathonTeam {self.id} - {self.name} for Hackathon {self.hackathon_id}>'
+
+
+# --- RFIDCard Model ---
+
+class RFIDCard(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    card_uid = db.Column(db.String(100), unique=True, index=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True)
+    issued_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    expiry_date = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(50), nullable=False, default='active', index=True) # e.g., "active", "inactive", "lost", "expired"
+    last_used_datetime = db.Column(db.DateTime, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False) # For record creation/update
+
+    user = db.relationship('User', backref=db.backref('rfid_cards', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<RFIDCard {self.card_uid} - Status: {self.status}>'
+
+
+# --- AccessPoint Model ---
+
+class AccessPoint(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    location_description = db.Column(db.Text, nullable=True)
+    reader_id = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # If linking to a specific college (optional, but good for multi-tenant systems)
+    # college_id = db.Column(db.Integer, db.ForeignKey('college.id'), nullable=False, index=True)
+    # college = db.relationship('College', backref=db.backref('access_points', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<AccessPoint {self.id} - {self.name} (Reader: {self.reader_id})>'
+
+
+# --- AccessLog Model ---
+
+class AccessLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    rfid_card_id = db.Column(db.Integer, db.ForeignKey('rfid_card.id'), nullable=False, index=True)
+    access_point_id = db.Column(db.Integer, db.ForeignKey('access_point.id'), nullable=False, index=True)
+    access_datetime = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    access_granted = db.Column(db.Boolean, nullable=False, index=True)
+    denial_reason = db.Column(db.String(255), nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False) # For record creation
+
+    rfid_card = db.relationship('RFIDCard', backref=db.backref('access_logs', lazy='dynamic'))
+    access_point = db.relationship('AccessPoint', backref=db.backref('access_logs', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<AccessLog {self.id} - Card {self.rfid_card_id} at AP {self.access_point_id} on {self.access_datetime} - Granted: {self.access_granted}>'
+
+
+# --- SecurityCamera Model ---
+
+class SecurityCamera(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    location_description = db.Column(db.Text, nullable=False)
+    ip_address_or_url = db.Column(db.String(255), unique=True, nullable=True)
+    camera_type = db.Column(db.String(50), nullable=True) # e.g., "PTZ", "Fixed", "Dome"
+    resolution = db.Column(db.String(50), nullable=True) # e.g., "1080p", "4K"
+    status = db.Column(db.String(50), nullable=False, default='offline', index=True) # e.g., "online", "offline", "recording", "error"
+    last_ping_datetime = db.Column(db.DateTime, nullable=True)
+    installation_date = db.Column(db.Date, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # If linking to a specific college (optional, but good for multi-tenant systems)
+    # college_id = db.Column(db.Integer, db.ForeignKey('college.id'), nullable=False, index=True)
+    # college = db.relationship('College', backref=db.backref('security_cameras', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<SecurityCamera {self.id} - {self.name} ({self.status})>'
+
+
+# --- SecurityIncident Model ---
+
+class SecurityIncident(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    incident_type = db.Column(db.String(100), nullable=False, index=True)
+    description = db.Column(db.Text, nullable=False)
+    reported_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True)
+    incident_datetime = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    location_description = db.Column(db.String(255), nullable=False)
+    status = db.Column(db.String(50), nullable=False, default='reported', index=True)
+    severity = db.Column(db.String(50), nullable=False, default='low', index=True)
+    action_taken = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    reporter = db.relationship('User', foreign_keys=[reported_by_id], backref=db.backref('reported_incidents', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<SecurityIncident {self.id} - {self.incident_type} at {self.location_description} ({self.status})>'
+
+
+# --- SecurityPatrolLog Model ---
+
+class SecurityPatrolLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    guard_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    log_datetime = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    shift_start_datetime = db.Column(db.DateTime, nullable=True)
+    shift_end_datetime = db.Column(db.DateTime, nullable=True)
+    entry_type = db.Column(db.String(100), nullable=False, index=True)
+    location_description = db.Column(db.String(255), nullable=True)
+    access_point_id = db.Column(db.Integer, db.ForeignKey('access_point.id'), nullable=True, index=True)
+    notes = db.Column(db.Text, nullable=False)
+    related_incident_id = db.Column(db.Integer, db.ForeignKey('security_incident.id'), nullable=True, index=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    guard = db.relationship('User', foreign_keys=[guard_id], backref=db.backref('patrol_logs', lazy='dynamic'))
+    access_point = db.relationship('AccessPoint', foreign_keys=[access_point_id], backref=db.backref('patrol_logs_at_point', lazy='dynamic'))
+    related_incident = db.relationship('SecurityIncident', foreign_keys=[related_incident_id], backref=db.backref('related_patrol_logs', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<SecurityPatrolLog {self.id} by Guard {self.guard_id} at {self.log_datetime} - Type: {self.entry_type}>'
+
+
+# --- BookCategory Model ---
+
+class BookCategory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    description = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f'<BookCategory {self.id} - {self.name}>'
+
+
+# --- Book Model ---
+
+class Book(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False, index=True)
+    author = db.Column(db.String(255), nullable=False, index=True)
+    isbn = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    publisher = db.Column(db.String(150), nullable=True)
+    publication_year = db.Column(db.Integer, nullable=True)
+    category_id = db.Column(db.Integer, db.ForeignKey('book_category.id'), nullable=False, index=True)
+    description = db.Column(db.Text, nullable=True)
+    cover_image_url = db.Column(db.String(255), nullable=True)
+    total_copies = db.Column(db.Integer, nullable=False, default=1)
+    available_copies = db.Column(db.Integer, nullable=False, default=1, index=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    category = db.relationship('BookCategory', backref=db.backref('books', lazy='dynamic'))
+
+    __table_args__ = (
+        db.CheckConstraint('available_copies >= 0', name='chk_available_copies_non_negative'),
+        db.CheckConstraint('total_copies >= available_copies', name='chk_total_copies_ge_available')
+    )
+
+    def __repr__(self):
+        return f'<Book {self.id} - {self.title} by {self.author} (ISBN: {self.isbn})>'
+
+
+# --- EBook Model ---
+
+class EBook(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    book_id = db.Column(db.Integer, db.ForeignKey('book.id'), unique=True, nullable=False, index=True)
+    file_format = db.Column(db.String(20), nullable=False) # e.g., "PDF", "EPUB", "MOBI"
+    file_url_or_path = db.Column(db.String(512), nullable=False)
+    file_size_mb = db.Column(db.Float, nullable=True)
+    drm_details = db.Column(db.Text, nullable=True)
+    access_instructions = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    book = db.relationship('Book', backref=db.backref('ebook_details', uselist=False, lazy='joined'))
+
+    def __repr__(self):
+        return f'<EBook {self.id} for Book ID {self.book_id} - Format: {self.file_format}>'
+
+
+# --- LibraryLoan Model ---
+
+class LibraryLoan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    book_id = db.Column(db.Integer, db.ForeignKey('book.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    loan_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    due_date = db.Column(db.DateTime, nullable=False, index=True)
+    return_date = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(50), nullable=False, default='active', index=True) # e.g., "active", "returned", "overdue", "lost"
+    notes = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    book = db.relationship('Book', backref=db.backref('loans', lazy='dynamic'))
+    user = db.relationship('User', backref=db.backref('library_loans', lazy='dynamic'))
+
+    __table_args__ = (
+        db.CheckConstraint('due_date > loan_date', name='chk_due_date_after_loan_date'),
+        db.CheckConstraint('return_date IS NULL OR return_date >= loan_date', name='chk_return_date_after_loan_date')
+    )
+
+    def __repr__(self):
+        return f'<LibraryLoan {self.id} - Book {self.book_id} to User {self.user_id} (Due: {self.due_date}) - Status: {self.status}>'
+
+
+# --- Fine Model ---
+
+class Fine(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    loan_id = db.Column(db.Integer, db.ForeignKey('library_loan.id'), nullable=True, index=True)
+    book_id = db.Column(db.Integer, db.ForeignKey('book.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    reason = db.Column(db.String(255), nullable=False)
+    issued_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    paid_status = db.Column(db.String(50), nullable=False, default='unpaid', index=True) # e.g., "unpaid", "paid", "partially_paid", "waived"
+    payment_date = db.Column(db.DateTime, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    loan = db.relationship('LibraryLoan', backref=db.backref('fines', lazy='dynamic'))
+    book = db.relationship('Book', backref=db.backref('fines_related', lazy='dynamic'))
+    user = db.relationship('User', backref=db.backref('library_fines', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<Fine {self.id} - User {self.user_id} owes {self.amount} for {self.reason} - Status: {self.paid_status}>'
+
+
+# --- BookReservation Model ---
+
+class BookReservation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    book_id = db.Column(db.Integer, db.ForeignKey('book.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    reservation_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    status = db.Column(db.String(50), nullable=False, default='pending', index=True) # e.g., "pending", "available", "fulfilled", "cancelled", "expired"
+    notification_sent = db.Column(db.Boolean, nullable=False, default=False)
+    fulfilled_date = db.Column(db.DateTime, nullable=True)
+    expiry_date = db.Column(db.DateTime, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    book = db.relationship('Book', backref=db.backref('reservations', lazy='dynamic'))
+    user = db.relationship('User', backref=db.backref('book_reservations', lazy='dynamic'))
+
+    # No __table_args__ unique constraint for now as per instructions.
+
+    def __repr__(self):
+        return f'<BookReservation {self.id} - Book {self.book_id} by User {self.user_id} (Status: {self.status})>'
