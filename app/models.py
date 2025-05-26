@@ -1010,3 +1010,49 @@ class AppointmentSlot(db.Model):
 
     def __repr__(self):
         return f'<AppointmentSlot {self.id} - Provider: {self.provider_id} from {self.start_time} to {self.end_time} (Booked: {self.is_booked})>'
+
+
+# --- Conversation Model ---
+
+class Conversation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    last_updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+
+    # Relationships to be fully established when Message and ConversationParticipant models are defined
+    messages = db.relationship('Message', backref='conversation', lazy='dynamic', order_by='Message.sent_at.asc()')
+    # participants link via ConversationParticipant
+    # The 'participants' backref will be created by User.conversations
+
+    def __repr__(self):
+        return f'<Conversation {self.id} - Created: {self.created_at} Last Update: {self.last_updated_at}>'
+
+
+# --- Message Model ---
+
+class Message(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversation.id'), nullable=False, index=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    content = db.Column(db.Text, nullable=False)
+    sent_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    is_read = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    deleted_by_sender = db.Column(db.Boolean, nullable=False, default=False)
+    attachment_url = db.Column(db.String(512), nullable=True)
+    attachment_type = db.Column(db.String(50), nullable=True)
+
+    # conversation relationship is established by Conversation.messages backref
+    sender = db.relationship('User', foreign_keys=[sender_id], backref=db.backref('sent_messages', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<Message {self.id} - From: {self.sender_id} in Conv: {self.conversation_id} at {self.sent_at}>'
+
+
+# --- ConversationParticipant Association Table ---
+# Placed after User, Conversation, and Message model definitions.
+conversation_participant = db.Table('conversation_participant',
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
+    db.Column('conversation_id', db.Integer, db.ForeignKey('conversation.id'), primary_key=True),
+    db.Column('joined_at', db.DateTime, default=datetime.utcnow, nullable=False),
+    db.Column('last_read_message_id', db.Integer, db.ForeignKey('message.id'), nullable=True, index=True)
+)
