@@ -51,6 +51,20 @@ Features:
     *   **Loan Management**: Tracks the lending of books to users, including loan dates, due dates, and return status. (Key model: `LibraryLoan`)
     *   **Fine Management**: Handles fines for overdue or damaged books, tracking amounts owed and payment status. (Key model: `Fine`)
     *   **Book Reservations**: Allows users to reserve books that are currently checked out. (Key model: `BookReservation`)
+*   **College Audit System (Financials):**
+    *   **Financial Account Management**: Defines and manages the college's chart of accounts (e.g., assets, liabilities, income, expenses). (Key model: `FinancialAccount`)
+    *   **Transaction Ledger**: Records all financial transactions with debits and credits to respective accounts, maintaining a detailed ledger. (Key model: `TransactionLedger`)
+    *   **Budgeting**: Allows for setting and tracking budgets for different financial accounts or departments over fiscal periods. (Key model: `Budget`)
+    *   **Audit Trails**: Logs significant financial actions and system events to provide a comprehensive audit trail. (Key model: `AuditLog`)
+*   **Email System for Parents:**
+    *   **Parent/Guardian Contact Management**: Maintains a database of parent/guardian contact information, linked to students. (Key model: `ParentGuardian`)
+    *   **Announcement System**: Facilitates creation of announcements. The system is designed to potentially leverage AI for content generation/personalization based on templates. (Key model: `Announcement`)
+    *   **Targeted Communication**: Allows for defining recipient groups for announcements (e.g., by grade level, specific activities). (Key model: `AnnouncementRecipientGroup`)
+    *   **Email Dispatch Logging**: Tracks emails sent to parents, including status (sent, failed, bounced) for deliverability monitoring. (Key model: `SentEmailLog`)
+*   **Appointment System (Teachers & Management):**
+    *   **Availability Management**: Enables teachers and management staff to define and publish their available time slots for appointments. (Key model: `AppointmentSlot`)
+    *   **Online Booking**: Allows users (e.g., parents, students) to book available appointment slots.
+    *   **Automated Email Confirmations/Reminders**: The system is designed to support automated email notifications for bookings, confirmations, and reminders. (Key model: `AppointmentBooking` for storing booking details that trigger emails)
 *   Search functionality (posts, courses, colleges).
 *   User notification system (e.g., for new comments on posts).
 *   Reels Section (Instagram-like):
@@ -139,3 +153,4 @@ SECRET_KEY: A strong, unique secret key.
 FLASK_ENV: production (this is also set in vercel.json).
 Deployment is typically done by connecting your Git repository (GitHub, GitLab, Bitbucket) to Vercel. Vercel will use the vercel.json file to build and deploy the application.
 This README provides a general guide. Specific details for your repository URL and any further project-specific configurations should be added as needed. The database initialization instructions may need adjustment based on whether an app factory (create_app) pattern is adopted or if the direct app instance is used from main.py or app/__init__.py.
+```
