@@ -803,3 +803,210 @@ class BookReservation(db.Model):
 
     def __repr__(self):
         return f'<BookReservation {self.id} - Book {self.book_id} by User {self.user_id} (Status: {self.status})>'
+
+
+# --- FinancialAccount Model ---
+
+class FinancialAccount(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    account_name = db.Column(db.String(150), unique=True, nullable=False, index=True)
+    account_code = db.Column(db.String(50), unique=True, nullable=True, index=True)
+    account_type = db.Column(db.String(50), nullable=False, index=True) # e.g., "Asset", "Liability", "Equity", "Revenue", "Expense"
+    description = db.Column(db.Text, nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f'<FinancialAccount {self.id} - {self.account_name} ({self.account_code}) - Type: {self.account_type}>'
+
+
+# --- TransactionLedger Model ---
+
+class TransactionLedger(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    transaction_date = db.Column(db.Date, nullable=False, index=True)
+    description = db.Column(db.Text, nullable=False)
+    debit_account_id = db.Column(db.Integer, db.ForeignKey('financial_account.id'), nullable=False, index=True)
+    credit_account_id = db.Column(db.Integer, db.ForeignKey('financial_account.id'), nullable=False, index=True)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    reference_id = db.Column(db.String(100), nullable=True, index=True)
+    entered_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    entry_datetime = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    is_approved = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    approved_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True)
+    approval_datetime = db.Column(db.DateTime, nullable=True)
+
+    debit_account = db.relationship('FinancialAccount', foreign_keys=[debit_account_id], backref=db.backref('debit_transactions', lazy='dynamic'))
+    credit_account = db.relationship('FinancialAccount', foreign_keys=[credit_account_id], backref=db.backref('credit_transactions', lazy='dynamic'))
+    entered_by = db.relationship('User', foreign_keys=[entered_by_id], backref=db.backref('entered_transactions', lazy='dynamic'))
+    approved_by = db.relationship('User', foreign_keys=[approved_by_id], backref=db.backref('approved_transactions', lazy='dynamic'))
+
+    __table_args__ = (
+        db.CheckConstraint('debit_account_id != credit_account_id', name='chk_debit_not_equal_credit'),
+    )
+
+    def __repr__(self):
+        return f'<TransactionLedger {self.id} - Date: {self.transaction_date} Amount: {self.amount} Dr: {self.debit_account_id} Cr: {self.credit_account_id}>'
+
+
+# --- Budget Model ---
+
+class Budget(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    financial_account_id = db.Column(db.Integer, db.ForeignKey('financial_account.id'), nullable=True, index=True)
+    department_name = db.Column(db.String(150), nullable=True, index=True)
+    fiscal_year = db.Column(db.Integer, nullable=False, index=True)
+    budget_period = db.Column(db.String(50), nullable=False, default='annual', index=True)
+    budgeted_amount = db.Column(db.Numeric(12, 2), nullable=False)
+    notes = db.Column(db.Text, nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    creation_datetime = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    last_updated_datetime = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    financial_account = db.relationship('FinancialAccount', backref=db.backref('budgets', lazy='dynamic'))
+    creator = db.relationship('User', foreign_keys=[created_by_id], backref=db.backref('created_budgets', lazy='dynamic'))
+
+    __table_args__ = (
+        db.UniqueConstraint('financial_account_id', 'fiscal_year', 'budget_period', name='uq_account_year_period_budget'),
+        db.UniqueConstraint('department_name', 'fiscal_year', 'budget_period', name='uq_department_year_period_budget'),
+        # Consider a CheckConstraint if either financial_account_id OR department_name must be non-null, but not both.
+        # Example: db.CheckConstraint('(financial_account_id IS NOT NULL AND department_name IS NULL) OR (financial_account_id IS NULL AND department_name IS NOT NULL)', name='chk_budget_target_exclusive')
+        # For now, allowing both or one to be null as per initial unique constraints.
+    )
+
+    def __repr__(self):
+        target_info = ""
+        if self.financial_account_id:
+            target_info += f"Acct:{self.financial_account_id}"
+        if self.department_name:
+            if target_info: target_info += "/"
+            target_info += f"Dept:{self.department_name}"
+        if not target_info:
+            target_info = "General"
+            
+        return f'<Budget {self.id} - FY{self.fiscal_year} ({self.budget_period}) Amount: {self.budgeted_amount} for {target_info}>'
+
+
+# --- AuditLog Model ---
+
+class AuditLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    action_type = db.Column(db.String(100), nullable=False, index=True)
+    target_entity = db.Column(db.String(100), nullable=True, index=True)
+    target_id = db.Column(db.Integer, nullable=True, index=True)
+    action_datetime = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    ip_address = db.Column(db.String(45), nullable=True)
+    details = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(50), nullable=True) # e.g., "success", "failure"
+
+    user = db.relationship('User', backref=db.backref('audit_logs', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<AuditLog {self.id} - User {self.user_id} performed {self.action_type} on {self.target_entity}:{self.target_id} at {self.action_datetime}>'
+
+
+# --- ParentGuardian Model ---
+
+class ParentGuardian(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    first_name = db.Column(db.String(100), nullable=False)
+    last_name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    phone_number = db.Column(db.String(20), nullable=True, index=True)
+    relationship_to_student = db.Column(db.String(50), nullable=False)
+    receives_communication = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    student = db.relationship('User', foreign_keys=[student_id], backref=db.backref('parent_guardians', lazy='dynamic'))
+
+    __table_args__ = (
+        db.UniqueConstraint('student_id', 'email', name='uq_student_parent_email'),
+        db.UniqueConstraint('student_id', 'first_name', 'last_name', 'relationship_to_student', name='uq_student_parent_identity')
+    )
+
+    def __repr__(self):
+        return f'<ParentGuardian {self.id} - {self.first_name} {self.last_name} (Email: {self.email}), Parent of Student ID {self.student_id}>'
+
+
+# --- Announcement Model ---
+
+class Announcement(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    content_template = db.Column(db.Text, nullable=False)
+    generated_content_preview = db.Column(db.Text, nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    creation_datetime = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    scheduled_send_datetime = db.Column(db.DateTime, nullable=True, index=True)
+    status = db.Column(db.String(50), nullable=False, default='draft', index=True) # e.g., "draft", "pending_approval", "approved_for_sending", "sending", "sent", "failed_to_send", "cancelled"
+    target_audience_description = db.Column(db.String(255), nullable=True)
+
+    creator = db.relationship('User', foreign_keys=[created_by_id], backref=db.backref('created_announcements', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<Announcement {self.id} - {self.title} (Status: {self.status})>'
+
+
+# --- AnnouncementRecipientGroup Model ---
+
+class AnnouncementRecipientGroup(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), unique=True, nullable=False, index=True)
+    description = db.Column(db.Text, nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    creation_datetime = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    is_dynamic = db.Column(db.Boolean, nullable=False, default=False)
+    dynamic_query_rules = db.Column(db.Text, nullable=True) # JSON or specific DSL
+
+    creator = db.relationship('User', foreign_keys=[created_by_id], backref=db.backref('created_recipient_groups', lazy='dynamic'))
+
+    # M2M with ParentGuardian omitted for now as per instructions.
+
+    def __repr__(self):
+        return f'<AnnouncementRecipientGroup {self.id} - {self.name}>'
+
+
+# --- SentEmailLog Model ---
+
+class SentEmailLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    parent_guardian_id = db.Column(db.Integer, db.ForeignKey('parent_guardian.id'), nullable=False, index=True)
+    announcement_id = db.Column(db.Integer, db.ForeignKey('announcement.id'), nullable=True, index=True)
+    email_subject = db.Column(db.String(255), nullable=False)
+    email_body_hash = db.Column(db.String(64), nullable=True, index=True)
+    sent_datetime = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    status = db.Column(db.String(50), nullable=False, index=True)
+    error_message = db.Column(db.Text, nullable=True)
+    message_id_header = db.Column(db.String(255), nullable=True, index=True)
+
+    parent_guardian = db.relationship('ParentGuardian', backref=db.backref('sent_emails', lazy='dynamic'))
+    announcement = db.relationship('Announcement', backref=db.backref('sent_email_logs', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<SentEmailLog {self.id} - To: {self.parent_guardian_id}, Subject: {self.email_subject}, Status: {self.status}>'
+
+
+# --- AppointmentSlot Model ---
+
+class AppointmentSlot(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    provider_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    start_time = db.Column(db.DateTime, nullable=False, index=True)
+    end_time = db.Column(db.DateTime, nullable=False, index=True)
+    is_booked = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    location = db.Column(db.String(255), nullable=True)
+    slot_type = db.Column(db.String(50), nullable=True, index=True)
+    notes_for_attendee = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    provider = db.relationship('User', backref=db.backref('appointment_slots', lazy='dynamic'))
+
+    __table_args__ = (
+        db.CheckConstraint('end_time > start_time', name='chk_slot_end_time_after_start_time'),
+        db.UniqueConstraint('provider_id', 'start_time', name='uq_provider_start_time_slot')
+    )
+
+    def __repr__(self):
+        return f'<AppointmentSlot {self.id} - Provider: {self.provider_id} from {self.start_time} to {self.end_time} (Booked: {self.is_booked})>'
