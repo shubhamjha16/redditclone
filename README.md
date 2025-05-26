@@ -45,7 +45,7 @@
 *   Mobile-responsive design.
 *   Comprehensive test suite (Pytest).
 
-  **  Hackathon Management System (Integrated Module)**
+  **Hackathon Management System (Integrated Module)**
 
 This module extends the Reddit-style College Community Platform by enabling colleges to organize, manage, and host hackathons within their dedicated community spaces. It streamlines event creation, team registration, project submission, judging, and result publishing — all from within the same platform.
 
