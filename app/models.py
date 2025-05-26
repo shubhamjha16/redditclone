@@ -318,8 +318,241 @@ class CourseEnrollment(db.Model):
 
     student = db.relationship('User', backref=db.backref('course_enrollments', lazy='dynamic'))
     course = db.relationship('Course', backref=db.backref('student_enrollments', lazy='dynamic'))
+    # grade_points field removed as per requirement
 
     __table_args__ = (db.UniqueConstraint('user_id', 'course_id', name='_student_course_enrollment_uc'),)
 
     def __repr__(self):
         return f'<CourseEnrollment User {self.user_id} in Course {self.course_id} - Status: {self.status}>'
+
+
+# --- Gradebook Model ---
+
+class Gradebook(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    enrollment_id = db.Column(db.Integer, db.ForeignKey('course_enrollment.id'), nullable=False, index=True)
+    grade_item_name = db.Column(db.String(150), nullable=False) # e.g., "Midterm Exam", "Homework 1"
+    score = db.Column(db.Float, nullable=True)
+    max_score = db.Column(db.Float, nullable=False)
+    comments = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    enrollment = db.relationship('CourseEnrollment', backref=db.backref('gradebook_entries', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<Gradebook {self.id} for Enrollment {self.enrollment_id} - {self.grade_item_name}>'
+
+
+# --- Assignment Model ---
+
+class Assignment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=False, index=True)
+    title = db.Column(db.String(150), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    due_date = db.Column(db.DateTime, nullable=True)
+    max_points = db.Column(db.Integer, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    course = db.relationship('Course', backref=db.backref('assignments', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<Assignment {self.id} - {self.title} for Course {self.course_id}>'
+
+
+# --- Submission Model ---
+
+class Submission(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    assignment_id = db.Column(db.Integer, db.ForeignKey('assignment.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True) # Student submitting
+    submission_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    content = db.Column(db.Text, nullable=True) # For text submissions or links
+    file_path = db.Column(db.String(255), nullable=True) # For file uploads
+    grade = db.Column(db.Float, nullable=True)
+    graded_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True) # User who graded it
+    grading_comments = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow) # Record creation/modification time
+
+    assignment = db.relationship('Assignment', backref=db.backref('submissions', lazy='dynamic'))
+    student = db.relationship('User', foreign_keys=[user_id], backref=db.backref('submissions', lazy='dynamic'))
+    grader = db.relationship('User', foreign_keys=[graded_by_id], backref=db.backref('graded_submissions', lazy='dynamic'))
+
+    __table_args__ = (db.UniqueConstraint('assignment_id', 'user_id', name='_assignment_user_submission_uc'),)
+
+    def __repr__(self):
+        return f'<Submission {self.id} by User {self.user_id} for Assignment {self.assignment_id}>'
+
+
+# --- FeeStructure Model ---
+
+class FeeStructure(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    college_id = db.Column(db.Integer, db.ForeignKey('college.id'), nullable=False, index=True)
+    course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=True, index=True)
+    fee_name = db.Column(db.String(150), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    due_date_pattern = db.Column(db.String(100), nullable=True) # e.g., "start_of_semester", "monthly", "specific_date_YYYY-MM-DD"
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    college = db.relationship('College', backref=db.backref('fee_structures', lazy='dynamic'))
+    course = db.relationship('Course', backref=db.backref('fee_structures', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<FeeStructure {self.id} - {self.fee_name} for College {self.college_id}>'
+
+
+# --- StudentFee Model ---
+
+class StudentFee(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True) # Student
+    fee_structure_id = db.Column(db.Integer, db.ForeignKey('fee_structure.id'), nullable=False, index=True)
+    due_date = db.Column(db.Date, nullable=False, index=True)
+    amount_due = db.Column(db.Numeric(10, 2), nullable=False)
+    amount_paid = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
+    payment_status = db.Column(db.String(50), nullable=False, default='pending', index=True) # e.g., "pending", "paid", "partially_paid", "overdue", "waived"
+    transaction_id = db.Column(db.String(255), nullable=True, index=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    student = db.relationship('User', backref=db.backref('student_fees', lazy='dynamic'))
+    fee_structure = db.relationship('FeeStructure', backref=db.backref('student_fee_entries', lazy='dynamic'))
+
+    __table_args__ = (db.UniqueConstraint('user_id', 'fee_structure_id', 'due_date', name='_user_fee_structure_due_date_uc'),)
+
+    def __repr__(self):
+        return f'<StudentFee {self.id} for User {self.user_id} - Status: {self.payment_status}>'
+
+
+# --- TimeSlot Model ---
+
+class TimeSlot(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=False, index=True)
+    day_of_week = db.Column(db.String(10), nullable=False, index=True) # e.g., "Monday", "Tuesday"
+    start_time = db.Column(db.Time, nullable=False)
+    end_time = db.Column(db.Time, nullable=False)
+    location = db.Column(db.String(100), nullable=True) # e.g., "Room A101", "Online"
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    course = db.relationship('Course', backref=db.backref('time_slots', lazy='dynamic'))
+
+    __table_args__ = (db.UniqueConstraint('course_id', 'day_of_week', 'start_time', name='_course_day_start_time_uc'),)
+
+    def __repr__(self):
+        return f'<TimeSlot {self.id} for Course {self.course_id} - {self.day_of_week} {self.start_time}-{self.end_time}>'
+
+
+# --- ResourceType Model ---
+
+class ResourceType(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<ResourceType {self.id} - {self.name}>'
+
+
+# --- Resource Model ---
+
+class Resource(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    resource_type_id = db.Column(db.Integer, db.ForeignKey('resource_type.id'), nullable=False, index=True)
+    name = db.Column(db.String(150), nullable=False)
+    college_id = db.Column(db.Integer, db.ForeignKey('college.id'), nullable=False, index=True)
+    location_description = db.Column(db.String(255), nullable=True)
+    capacity = db.Column(db.Integer, nullable=True)
+    is_available = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    resource_type = db.relationship('ResourceType', backref=db.backref('resources', lazy='dynamic'))
+    college = db.relationship('College', backref=db.backref('resources', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<Resource {self.id} - {self.name} (Type: {self.resource_type_id})>'
+
+
+# --- ResourceBooking Model ---
+
+class ResourceBooking(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    resource_id = db.Column(db.Integer, db.ForeignKey('resource.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True) # Booker
+    course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=True, index=True) # Optional
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=True, index=True) # Optional
+    start_time = db.Column(db.DateTime, nullable=False, index=True)
+    end_time = db.Column(db.DateTime, nullable=False, index=True)
+    purpose = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(50), nullable=False, default='confirmed', index=True) # e.g., "confirmed", "pending_approval", "cancelled"
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    resource = db.relationship('Resource', backref=db.backref('bookings', lazy='dynamic'))
+    booker = db.relationship('User', backref=db.backref('resource_bookings', lazy='dynamic'))
+    course = db.relationship('Course', backref=db.backref('resource_bookings', lazy='dynamic'))
+    event = db.relationship('Event', backref=db.backref('resource_bookings', lazy='dynamic'))
+
+    __table_args__ = (
+        db.CheckConstraint('end_time > start_time', name='chk_booking_end_time_after_start_time'),
+    )
+
+    def __repr__(self):
+        return f'<ResourceBooking {self.id} for Resource {self.resource_id} by User {self.user_id} from {self.start_time} to {self.end_time}>'
+
+
+# --- Hackathon Model ---
+
+class Hackathon(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    college_id = db.Column(db.Integer, db.ForeignKey('college.id'), nullable=False, index=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    start_datetime = db.Column(db.DateTime, nullable=False, index=True)
+    end_datetime = db.Column(db.DateTime, nullable=False, index=True)
+    registration_deadline = db.Column(db.DateTime, nullable=False, index=True)
+    venue = db.Column(db.String(200), nullable=False)
+    organizer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    theme = db.Column(db.String(100), nullable=True)
+    rules = db.Column(db.Text, nullable=True)
+    prizes = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(50), nullable=False, default='upcoming', index=True) # e.g., upcoming, ongoing, completed, cancelled
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    college = db.relationship('College', backref=db.backref('hackathons', lazy='dynamic'))
+    organizer = db.relationship('User', backref=db.backref('organized_hackathons', lazy='dynamic'))
+
+    __table_args__ = (
+        db.CheckConstraint('end_datetime > start_datetime', name='chk_hackathon_end_after_start'),
+        db.CheckConstraint('registration_deadline < start_datetime', name='chk_hackathon_reg_deadline_before_start'),
+    )
+
+    def __repr__(self):
+        return f'<Hackathon {self.id} - {self.title} at College {self.college_id}>'
+
+
+# --- HackathonTeam Model ---
+
+class HackathonTeam(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    hackathon_id = db.Column(db.Integer, db.ForeignKey('hackathon.id'), nullable=False, index=True)
+    name = db.Column(db.String(100), nullable=False)
+    leader_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True) # User who is the team leader
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    hackathon = db.relationship('Hackathon', backref=db.backref('teams', lazy='dynamic'))
+    leader = db.relationship('User', backref=db.backref('led_teams', lazy='dynamic'))
+
+    __table_args__ = (
+        db.UniqueConstraint('hackathon_id', 'name', name='_hackathon_team_name_uc'),
+        db.UniqueConstraint('hackathon_id', 'leader_id', name='_hackathon_leader_uc'),
+    )
+
+    def __repr__(self):
+        return f'<HackathonTeam {self.id} - {self.name} for Hackathon {self.hackathon_id}>'
