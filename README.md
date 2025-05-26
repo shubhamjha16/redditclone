@@ -1,156 +1,233 @@
-College Community Platform
-Description: A Reddit-style community platform designed for college communities, enabling students, faculty, and staff to connect, share information, and build communities around academic interests, courses, campus life, and events.
+# College Community Platform & Integrated Management Systems
 
-Features:
+## 1. Overview
 
-*   User registration and authentication (with college affiliation, student ID, year of college).
-*   Role-based access control (User, Admin).
-*   Reddit-style content platform:
-    *   Post creation, viewing, voting, and commenting.
-    *   College-specific spaces (sub-communities).
-    *   Content display in a card-based, Reddit-like UI.
-*   Enhanced User Profiles & Follow System:
-    *   Customizable profile pictures and bios.
-    *   User activity tracking (last_seen).
-    *   Follower/Following system enabling users to connect.
-*   College-Specific Features:
-    *   Course discussions.
-    *   Study group organization.
-    *   Event creation and management.
-*   Student Enrollment Management:
-    *   Courses can have defined capacities.
-    *   Students can enroll in and unenroll from courses.
-    *   Enrollment is subject to course capacity (waitlist functionality can be a future addition).
-    *   Admins and Management can manage enrollments (add, drop, change student status in courses).
-    *   User profiles display enrolled courses.
-    *   Course listings show current enrollment counts vs. capacity.
-    *   Attendance system now uses enrollment data for accurate rosters.
-    *   Introduction of a 'Management' user role with permissions for enrollment management.
-*   Administrative Tools:
-    *   College management (create, edit).
-    *   User management (verify affiliation, change roles).
-    *   Content moderation (reporting system, review reported content).
-*   Attendance Management System:
-    *   Faculty/Admins can take attendance for courses, marking students as present, absent, late, or excused.
-    *   Students can view their own attendance records.
-    *   Admins/Faculty can view attendance reports for courses, with filtering options.
-    *   Introduction of a 'Faculty' user role with specific permissions for taking attendance.
-*   **Enterprise Resource Planning (ERP) Features:**
-    *   **Gradebook Management**: Allows faculty to record and manage student grades for various assignments, exams, and coursework components. Tracks scores, maximum scores, and comments for each grade entry. (Key models: `Gradebook`, `Assignment`, `Submission`)
-    *   **Fee Tracking Integration**: Provides tools for defining fee structures (e.g., tuition, lab fees) and tracking student payments, including amounts due, amounts paid, and payment statuses. (Key models: `FeeStructure`, `StudentFee`)
-    *   **Timetable Scheduling (Simplified)**: Enables the definition of course schedules, including days of the week, start and end times, and locations for course sessions. (Key model: `TimeSlot`)
-    *   **Resource Allocation**: Manages college resources like classrooms and equipment. Allows for defining resource types, specific resources, and booking them for courses or events. (Key models: `ResourceType`, `Resource`, `ResourceBooking`)
-*   **RFID and Security Management System:**
-    *   **RFID Card Management**: Manages RFID cards for identity verification and access control. (Key model: `RFIDCard`)
-    *   **Access Control**: Defines and manages RFID-enabled access points (e.g., doors, labs) and logs all access attempts, successful or denied. (Key models: `AccessPoint`, `AccessLog`)
-    *   **Security Patrol Logging**: Allows security personnel to log their activities, observations, and shift details, similar to a digital guard logbook. (Key model: `SecurityPatrolLog`)
-    *   **Security Camera Catalog**: Catalogs security cameras within the institution, including their location and status. (Key model: `SecurityCamera`)
-    *   **Incident Reporting**: Logs security incidents, detailing the type, description, location, severity, and actions taken. (Key model: `SecurityIncident`)
-*   **Online Library System:**
-    *   **Book Catalog & Categorization**: Manages a catalog of books, including details like title, author, ISBN, publisher, and categorization. Supports physical and e-books. (Key models: `Book`, `BookCategory`, `EBook`)
-    *   **Loan Management**: Tracks the lending of books to users, including loan dates, due dates, and return status. (Key model: `LibraryLoan`)
-    *   **Fine Management**: Handles fines for overdue or damaged books, tracking amounts owed and payment status. (Key model: `Fine`)
-    *   **Book Reservations**: Allows users to reserve books that are currently checked out. (Key model: `BookReservation`)
-*   **College Audit System (Financials):**
-    *   **Financial Account Management**: Defines and manages the college's chart of accounts (e.g., assets, liabilities, income, expenses). (Key model: `FinancialAccount`)
-    *   **Transaction Ledger**: Records all financial transactions with debits and credits to respective accounts, maintaining a detailed ledger. (Key model: `TransactionLedger`)
-    *   **Budgeting**: Allows for setting and tracking budgets for different financial accounts or departments over fiscal periods. (Key model: `Budget`)
-    *   **Audit Trails**: Logs significant financial actions and system events to provide a comprehensive audit trail. (Key model: `AuditLog`)
-*   **Email System for Parents:**
-    *   **Parent/Guardian Contact Management**: Maintains a database of parent/guardian contact information, linked to students. (Key model: `ParentGuardian`)
-    *   **Announcement System**: Facilitates creation of announcements. The system is designed to potentially leverage AI for content generation/personalization based on templates. (Key model: `Announcement`)
-    *   **Targeted Communication**: Allows for defining recipient groups for announcements (e.g., by grade level, specific activities). (Key model: `AnnouncementRecipientGroup`)
-    *   **Email Dispatch Logging**: Tracks emails sent to parents, including status (sent, failed, bounced) for deliverability monitoring. (Key model: `SentEmailLog`)
-*   **Appointment System (Teachers & Management):**
-    *   **Availability Management**: Enables teachers and management staff to define and publish their available time slots for appointments. (Key model: `AppointmentSlot`)
-    *   **Online Booking**: Allows users (e.g., parents, students) to book available appointment slots.
-    *   **Automated Email Confirmations/Reminders**: The system is designed to support automated email notifications for bookings, confirmations, and reminders. (Key model: `AppointmentBooking` for storing booking details that trigger emails)
+This project is a Flask-based web application designed as a multi-faceted platform for college communities. It began as a Reddit-style community system and has been progressively extended to include an Enterprise Resource Planning (ERP) suite, Hackathon Management, RFID & Security Systems, an Online Library, a College Audit System, a Parent Email System, an Appointment System, and a Direct Messaging feature. The goal is to provide a centralized, comprehensive digital environment for students, faculty, staff, and administration.
+
+## 2. Project Structure
+
+The project follows a standard Flask application layout:
+
+*   **`main.py`**: The main entry point to run the Flask application.
+*   **`config.py`**: Contains configuration classes for the application (e.g., database URI, secret key for different environments like production and testing).
+*   **`app/`**: The main application package.
+    *   **`__init__.py`**: Initializes the Flask app, database (SQLAlchemy), login manager, and other extensions. Also contains context processors.
+    *   **`models.py`**: Defines all SQLAlchemy database models for the application. This is the primary source of truth for the application's data structure, covering all integrated systems.
+    *   **`routes.py`**: Contains all the URL routing logic and view functions that handle requests and interact with models and templates.
+    *   **`forms.py`**: Defines forms used throughout the application using Flask-WTF and WTForms.
+    *   **`utils.py`**: Utility functions used across the application.
+*   **`models/` (JavaScript/Mongoose)**: Contains JavaScript-based Mongoose models (e.g., `College.js`, `Course.js`, `User.js`). These appear to be for a separate Node.js backend or API, distinct from the main Flask application's SQLAlchemy models.
+*   **`routes/` (JavaScript)**: Contains JavaScript-based route handlers (e.g., `college.js`), likely associated with the Mongoose models and a Node.js backend.
+*   **`static/`**: Stores static files like CSS, JavaScript (for frontend), and images.
+    *   `css/style.css`: Custom stylesheets for the application.
+*   **`templates/`**: Contains Jinja2 HTML templates used to render pages.
+    *   `admin/`: Templates specific to admin functionalities.
+    *   Includes templates for various features like posts, courses, events, user profiles, authentication, etc.
+*   **`tests/`**: Contains unit and integration tests for the application.
+    *   `test_auth.py`, `test_models.py`, `test_routes.py`, etc.
+*   **`requirements.txt`**: Lists Python package dependencies for the Flask application.
+*   **`vercel.json`**: Configuration file for deploying the Python Flask backend to Vercel.
+*   **`app.js`**: Root JavaScript file, potentially for the Node.js backend if used.
+
+## 3. Core Features & Modules
+
+The platform integrates a wide array of functionalities:
+
+### 3.1. College Community Platform (Core)
+*   User registration and authentication (students, faculty, alumni, management, admin) with college affiliation.
+*   Role-based access control.
+*   Reddit-style content platform: Post creation, viewing, voting, and commenting.
+*   College-specific spaces (sub-communities).
+*   Enhanced User Profiles with bios, profile pictures, and activity tracking.
+*   Follower/Following system.
+*   Content reporting and admin moderation.
+*   User notification system.
+*   Reels Section (Instagram-like short video sharing).
+
+### 3.2. Enterprise Resource Planning (ERP) Features
+*   **Gradebook Management**: Record and manage student grades for assignments and courses. (Models: `Gradebook`, `Assignment`, `Submission`)
+*   **Fee Tracking Integration**: Define fee structures and track student payments. (Models: `FeeStructure`, `StudentFee`)
+*   **Timetable Scheduling**: Define and view course schedules. (Model: `TimeSlot`)
+*   **Resource Allocation**: Manage and book college resources (e.g., rooms, equipment). (Models: `ResourceType`, `Resource`, `ResourceBooking`)
+
+### 3.3. Hackathon Management System
+*   College-specific Hackathon event listings and management.
+*   Team registration and solo participation.
+*   Project submission system (GitHub, links, demos).
+*   Judging dashboard, scoring, and ranking.
+*   Automated result publishing and certificate generation.
+(Key Models: `Hackathon`, `HackathonTeam`, `HackathonParticipant`, `HackathonProject`, `HackathonJudge`, `HackathonJudgingCriteria`, `HackathonScore`, `HackathonResult`, `Certificate`)
+
+### 3.4. RFID and Security Management System (Phase 5)
+*   **RFID Card Management**: Manages RFID cards for identity and access. (Model: `RFIDCard`)
+*   **Access Control**: Defines RFID-enabled access points and logs all access attempts. (Models: `AccessPoint`, `AccessLog`)
+*   **Security Patrol Logging**: Digital logbook for security personnel activities. (Model: `SecurityPatrolLog`)
+*   **Security Camera Catalog**: Catalogs security cameras. (Model: `SecurityCamera`)
+*   **Incident Reporting**: Logs security incidents. (Model: `SecurityIncident`)
+
+### 3.5. Online Library System (Phase 6)
+*   **Book Catalog & Categorization**: Manages library book inventory, including e-books. (Models: `Book`, `BookCategory`, `EBook`)
+*   **Loan Management**: Tracks book lending, due dates, and returns. (Model: `LibraryLoan`)
+*   **Fine Management**: Handles fines for overdue or damaged books. (Model: `Fine`)
+*   **Book Reservations**: Allows users to reserve unavailable books. (Model: `BookReservation`)
+
+### 3.6. College Audit System (Financials - Phase 7)
+*   **Financial Account Management**: Manages the college's chart of accounts. (Model: `FinancialAccount`)
+*   **Transaction Ledger**: Records all financial transactions. (Model: `TransactionLedger`)
+*   **Budgeting**: Defines and tracks budgets for accounts/departments. (Model: `Budget`)
+*   **Audit Trails**: Logs significant financial system actions. (Model: `AuditLog`)
+
+### 3.7. Email System for Parents (Phase 8)
+*   **Parent/Guardian Contact Management**: Manages parent/guardian contact details. (Model: `ParentGuardian`)
+*   **Announcement System**: Facilitates creating announcements, with potential AI integration for content. (Model: `Announcement`)
+*   **Targeted Communication**: Defines recipient groups for announcements. (Model: `AnnouncementRecipientGroup`)
+*   **Email Dispatch Logging**: Tracks sent emails and their status. (Model: `SentEmailLog`)
+
+### 3.8. Appointment System (Teachers & Management - Phase 9)
+*   **Availability Management**: Staff can define their available appointment slots. (Model: `AppointmentSlot`)
+*   **Online Booking**: Users can book available appointments.
+*   **Automated Email Notifications**: System supports automated emails for bookings. (Model: `AppointmentBooking`)
+
+### 3.9. Direct Messaging (DM) System (Phase 10)
+*   **Private Conversations**: Users can engage in one-on-one or group direct messages. (Model: `Conversation`)
+*   **Message Storage**: Stores individual messages within conversations. (Model: `Message`)
+*   **Participants & Read Status**: Manages conversation participants and tracks message read status. (Table: `conversation_participant`)
+
+### 3.10. General Features
 *   Search functionality (posts, courses, colleges).
-*   User notification system (e.g., for new comments on posts).
-*   Reels Section (Instagram-like):
-    *   Users can post short video content (via URL) with captions.
-    *   Viewable feed of reels with pagination.
-    *   Ability to like and comment on reels.
-    *   View count for reels.
 *   Mobile-responsive design.
 *   Comprehensive test suite (Pytest).
 
-Hackathon Management System (Integrated Module)
+## 4. SQLAlchemy Database Models Overview (`app/models.py`)
 
-This module extends the Reddit-style College Community Platform by enabling colleges to organize, manage, and host hackathons within their dedicated community spaces. It streamlines event creation, team registration, project submission, judging, and result publishing — all from within the same platform.
+This application uses SQLAlchemy for database interactions. Below is a list of the primary models defined. For detailed fields and relationships, please refer to the `app/models.py` file.
 
-Features:
+*   **Core Community & User Management:**
+    *   `User`: Central model for all users (students, faculty, admin, etc.), roles, profiles.
+    *   `College`: Information about colleges.
+    *   `Post`: User-generated content (like forum posts).
+    *   `Comment`: Comments on posts.
+    *   `Vote`: Upvotes/downvotes for posts and comments.
+    *   `StudyGroup`: User-created study groups.
+    *   `Event`: College events.
+    *   `Report`: For reporting content.
+    *   `Notification`: User notifications.
+    *   `Reel`, `ReelComment`, `ReelLike`: Short video feature.
+*   **Academic & ERP Modules:**
+    *   `Course`: Course details, offerings.
+    *   `AttendanceRecord`: Student attendance.
+    *   `CourseEnrollment`: Student enrollment in courses.
+    *   `Gradebook`: Detailed grade items for enrollments.
+    *   `Assignment`: Course assignments.
+    *   `Submission`: Student submissions for assignments.
+    *   `FeeStructure`: Definition of fees.
+    *   `StudentFee`: Fees owed by students.
+    *   `TimeSlot`: Course scheduling.
+    *   `ResourceType`, `Resource`, `ResourceBooking`: Resource management.
+*   **Hackathon Management:**
+    *   `Hackathon`: Hackathon event details.
+    *   `HackathonTeam`: Teams in hackathons.
+    *   `HackathonParticipant`: Linking users to teams/hackathons.
+    *   `HackathonProject`: Submitted projects.
+    *   `HackathonJudge`, `HackathonJudgingCriteria`, `HackathonScore`: Judging process.
+    *   `HackathonResult`: Final results.
+    *   `Certificate`: Certificates for hackathons.
+*   **RFID and Security Management:**
+    *   `RFIDCard`: RFID card details.
+    *   `AccessPoint`: RFID reader locations.
+    *   `AccessLog`: Logs of RFID access attempts.
+    *   `SecurityCamera`: Details of security cameras.
+    *   `SecurityIncident`: Logs for security incidents.
+    *   `SecurityPatrolLog`: Security guard activity logs.
+*   **Online Library System:**
+    *   `BookCategory`: Categories for books.
+    *   `Book`: Library book details.
+    *   `EBook`: E-book specific details.
+    *   `LibraryLoan`: Tracking book loans.
+    *   `Fine`: Fines for library items.
+    *   `BookReservation`: Reservations for unavailable books.
+*   **College Audit System (Financials):**
+    *   `FinancialAccount`: Chart of accounts.
+    *   `TransactionLedger`: Financial transactions.
+    *   `Budget`: Budget definitions.
+    *   `AuditLog`: Audit trails for financial actions.
+*   **Email System for Parents:**
+    *   `ParentGuardian`: Parent/guardian contact information.
+    *   `Announcement`: Announcements to be sent.
+    *   `AnnouncementRecipientGroup`: Groups for targeted announcements.
+    *   `SentEmailLog`: Logs of dispatched emails.
+*   **Appointment System:**
+    *   `AppointmentSlot`: Staff availability for appointments.
+    *   `AppointmentBooking`: Booked appointments.
+*   **Direct Messaging System:**
+    *   `Conversation`: Represents a chat session.
+    *   `Message`: Individual messages within conversations.
+    *   `conversation_participant` (Association Table): Links users to conversations.
 
-College-specific Hackathon Listings: Display upcoming, ongoing, and past hackathons.
+## 5. Setup and Installation (Flask Application)
 
-User Registration: Solo or team-based signups using verified college profiles.
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository_url>
+    cd <repository_directory>
+    ```
+2.  **Create a virtual environment:**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    ```
+3.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+4.  **Configure the application:**
+    *   Set environment variables or update `config.py` directly (not recommended for production secrets).
+    *   **`SECRET_KEY`**: A strong, unique secret key (critical for session security).
+    *   **`DATABASE_URL`**: Connection string for your database (e.g., `postgresql://user:pass@host:port/dbname`). Defaults to SQLite for local development.
+5.  **Initialize the database:**
+    *   Ensure your database server (e.g., PostgreSQL) is running if not using SQLite.
+    *   Open a Flask shell (`flask shell`) and run:
+        ```python
+        from app import db
+        db.create_all()
+        ```
+    *   Alternatively, if Flask-Migrate is integrated:
+        ```bash
+        flask db init  # (if first time)
+        flask db migrate -m "Initial migration of all models"
+        flask db upgrade
+        ```
 
-Project Submission System: Upload GitHub repos, design links, demos, and documentation.
+## 6. Running the Flask Application Locally
 
-Judging Dashboard: Score, review, and rank submissions with role-based access for judges.
-
-Result & Certificate Generation: Auto-publish winners and generate participation/winner certificates.
-
-Discussion & Collaboration: Built-in comments, Q&A, and team-finding threads.
-
-Notification System: Alerts for deadlines, updates, and feedback.
-
-Technologies Used:
-
-Backend: Python, Flask, SQLAlchemy, Gunicorn
-Frontend: HTML, CSS, Bootstrap (for basic structure and components)
-Database: SQLite (for development), PostgreSQL (recommended for production)
-Testing: Pytest, Pytest-Flask, Pytest-Cov
-Prerequisites for Local Setup:
-
-Python 3.8+
-pip (Python package installer)
-Virtual environment tool (e.g., venv)
-Local Development Setup:
-
-Clone the repository:
-git clone <repository_url>
-cd <repository_directory>
-Create and activate a virtual environment:
-python -m venv venv
-# On Windows
-# venv\Scripts\activate
-# On macOS/Linux
-# source venv/bin/activate
-Install dependencies:
-pip install -r requirements.txt
-Initialize the database:
-The application is configured to create site.db (SQLite) automatically if it doesn't exist when run locally for development. For a fresh start, simply delete site.db if it exists.
-To manually create all tables if needed (e.g., after code changes to models before implementing migrations):
-# In a Python shell, from the project root:
-from app import create_app, db
-app = create_app()
-with app.app_context():
-    db.create_all()
-Set up environment variables (optional for local development with defaults):
-SECRET_KEY: A default is provided in config.py for development. For production, this must be a strong, unique key set as an environment variable.
-DATABASE_URL: Defaults to SQLite (site.db). Set this environment variable if you wish to use PostgreSQL or another database locally.
-Running the Application Locally:
-
+```bash
 flask run
-# Or
+```
+Or, if using `main.py` directly (less common for development with auto-reload):
+```bash
 python main.py
-The application will typically be available at http://127.0.0.1:5000/.
+```
+The application will typically be available at `http://127.0.0.1:5000/`.
 
-Running Tests:
+## 7. Running Tests
 
+Tests are located in the `tests/` directory. To run them (assuming pytest):
+
+```bash
 pytest
+```
 To see test coverage:
-
+```bash
 pytest --cov=app
-Deployment (Vercel):
+```
 
-This project is configured for deployment on Vercel via the vercel.json file.
-Critical for Production: The application must be configured to use a PostgreSQL database (e.g., Vercel Postgres, Neon, Aiven) for production deployment on Vercel. The DATABASE_URL environment variable must be set in your Vercel project settings. SQLite is not suitable for Vercel's production environment.
-Environment Variables on Vercel: Ensure the following are set in your Vercel project settings:
-DATABASE_URL: Connection string for your production PostgreSQL database.
-SECRET_KEY: A strong, unique secret key.
-FLASK_ENV: production (this is also set in vercel.json).
-Deployment is typically done by connecting your Git repository (GitHub, GitLab, Bitbucket) to Vercel. Vercel will use the vercel.json file to build and deploy the application.
-This README provides a general guide. Specific details for your repository URL and any further project-specific configurations should be added as needed. The database initialization instructions may need adjustment based on whether an app factory (create_app) pattern is adopted or if the direct app instance is used from main.py or app/__init__.py.
+## 8. Deployment (Vercel Example)
+
+*   This project is configured for deployment on Vercel via the `vercel.json` file for the Python backend.
+*   **Database**: For production on Vercel, **a PostgreSQL database is critical**. The `DATABASE_URL` environment variable must be set in your Vercel project settings. SQLite is not suitable for Vercel's production environment.
+*   **Environment Variables on Vercel**: Ensure `DATABASE_URL` and `SECRET_KEY` are set in your Vercel project settings. `FLASK_ENV=production` is also recommended and is set in `vercel.json`.
+*   Deployment is typically done by connecting your Git repository to Vercel.
+
+---
+*This README provides a comprehensive overview. For specific details, always refer to the source code and individual module documentation.* 
 ```
