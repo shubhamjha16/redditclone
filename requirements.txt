@@ -8,3 +8,4 @@ Gunicorn
 pytest
 pytest-flask
 pytest-cov
+google-generativeai

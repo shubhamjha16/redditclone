@@ -10,6 +10,10 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'login' # The route to redirect to for login_required
 login_manager.login_message_category = 'info'
 
+# Import and register Blueprints
+from app.chatbot import chatbot_bp
+app.register_blueprint(chatbot_bp, url_prefix='/chatbot')
+
 
 from app import routes, models # routes needs to be imported before context processor usually
 

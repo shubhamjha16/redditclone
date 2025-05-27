@@ -40,6 +40,11 @@
                             {% endif %}
                         </div>
                     </li>
+                    {% if current_user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('chatbot.chatbot_ui') }}">Chatbot</a>
+                    </li>
+                    {% endif %}
                      {% if current_user.is_authenticated and current_user.college_id %}
                       <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownMyCollegeLink" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
